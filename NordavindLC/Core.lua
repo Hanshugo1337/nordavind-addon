@@ -201,8 +201,33 @@ end
 
 SLASH_NORDLC1 = "/nordlc"
 SlashCmdList["NORDLC"] = function(msg)
-  local cmd, arg = msg:lower():trim():match("^(%S*)%s*(.*)$")
-  if cmd == "activate" then
+  local trimmed = msg:trim()
+  local cmd = trimmed:match("^(%S+)") or ""
+  cmd = cmd:lower()
+  local arg = trimmed:match("^%S+%s+(.+)$") or ""
+
+  if cmd == "council" then
+    -- Manual council: /nordlc council [item-link]
+    if not NLC.active then
+      NLC.Utils.Print("Addon er ikke aktivert. Bruk /nordlc activate forst.")
+      return
+    end
+    if not NLC.isOfficer then
+      NLC.Utils.Print("Kun officers kan starte council.")
+      return
+    end
+    -- arg contains the item link (preserved case)
+    local itemLink = arg:match("|c.-|h.-|h|r")
+    if not itemLink then
+      NLC.Utils.Print("Bruk: /nordlc council [shift-klikk item her]")
+      return
+    end
+    local _, _, _, ilvl, _, _, _, _, equipLoc = C_Item.GetItemInfo(itemLink)
+    local itemId = C_Item.GetItemInfoInstant(itemLink)
+    NLC.Council.StartSession(itemLink, itemId or 0, ilvl or 0, equipLoc or "", "Manuelt")
+    return
+
+  elseif cmd == "activate" then
     NLC.Activate()
   elseif cmd == "deactivate" then
     NLC.Deactivate()
@@ -239,6 +264,7 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.Utils.Print("Kommandoer:")
     NLC.Utils.Print("  /nordlc activate — Aktiver addon")
     NLC.Utils.Print("  /nordlc deactivate — Deaktiver addon")
+    NLC.Utils.Print("  /nordlc council [item] — Start council for et item (shift-klikk)")
     NLC.Utils.Print("  /nordlc pending — Vis ventende items")
     NLC.Utils.Print("  /nordlc resume <nr> — Gjenoppta ventende item")
     NLC.Utils.Print("  /nordlc import — Last inn import-data")
