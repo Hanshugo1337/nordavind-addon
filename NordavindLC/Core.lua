@@ -60,17 +60,102 @@ function NLC.CheckOfficer()
   return false
 end
 
+-- Minimap button
+local minimapBtn = nil
+
+function NLC.CreateMinimapButton()
+  if minimapBtn then minimapBtn:Show(); return end
+
+  minimapBtn = CreateFrame("Button", "NordavindLCMinimap", Minimap)
+  minimapBtn:SetSize(32, 32)
+  minimapBtn:SetFrameStrata("MEDIUM")
+  minimapBtn:SetFrameLevel(8)
+  minimapBtn:SetPoint("TOPLEFT", Minimap, "TOPLEFT", 2, -2)
+  minimapBtn:SetMovable(true)
+  minimapBtn:EnableMouse(true)
+  minimapBtn:RegisterForDrag("LeftButton")
+
+  local icon = minimapBtn:CreateTexture(nil, "ARTWORK")
+  icon:SetSize(28, 28)
+  icon:SetPoint("CENTER")
+  icon:SetTexture("Interface\\AddOns\\NordavindLC\\logo")
+  icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
+  minimapBtn.icon = icon
+
+  local border = minimapBtn:CreateTexture(nil, "OVERLAY")
+  border:SetSize(54, 54)
+  border:SetPoint("CENTER")
+  border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+  minimapBtn.border = border
+
+  -- Pending count text
+  local countText = minimapBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  countText:SetPoint("BOTTOM", 0, -2)
+  countText:SetText("")
+  minimapBtn.countText = countText
+
+  minimapBtn:SetScript("OnClick", function(self, button)
+    if button == "LeftButton" then
+      if #NLC.pendingSessions > 0 then
+        SlashCmdList["NORDLC"]("pending")
+      else
+        SlashCmdList["NORDLC"]("status")
+      end
+    elseif button == "RightButton" then
+      NLC.Deactivate()
+      if minimapBtn then minimapBtn:Hide() end
+    end
+  end)
+  minimapBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+
+  minimapBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:AddLine("NordavindLC", 0, 0.8, 1)
+    GameTooltip:AddLine(NLC.active and "|cff00ff00Aktiv|r" or "|cffff0000Inaktiv|r", 1, 1, 1)
+    if NLC.isOfficer then
+      GameTooltip:AddLine("Officer-modus", 0.5, 1, 0.5)
+    end
+    local pending = #NLC.pendingSessions
+    if pending > 0 then
+      GameTooltip:AddLine(pending .. " ventende items", 1, 0.8, 0)
+    end
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine("Venstreklikk: Status / Pending", 0.6, 0.6, 0.6)
+    GameTooltip:AddLine("Hoyreklikk: Deaktiver", 0.6, 0.6, 0.6)
+    GameTooltip:Show()
+  end)
+  minimapBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+  -- Dragging
+  minimapBtn:SetScript("OnDragStart", function(self) self:StartMoving() end)
+  minimapBtn:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+
+  minimapBtn:Show()
+end
+
+function NLC.UpdateMinimapCount()
+  if not minimapBtn then return end
+  local pending = #NLC.pendingSessions
+  if pending > 0 then
+    minimapBtn.countText:SetText("|cffff8800" .. pending .. "|r")
+  else
+    minimapBtn.countText:SetText("")
+  end
+end
+
 function NLC.Activate()
   NLC.active = true
   NLC.CheckOfficer()
   NLC.Comms.Register()
   NLC.LootDetection.Register()
+  NLC.CreateMinimapButton()
   NLC.Utils.Print("Aktivert! " .. (NLC.isOfficer and "(Officer-modus)" or "(Raider-modus)"))
 end
 
 function NLC.Deactivate()
   NLC.active = false
   NLC.LootDetection.Unregister()
+  if minimapBtn then minimapBtn:Hide() end
   NLC.Utils.Print("Deaktivert.")
 end
 

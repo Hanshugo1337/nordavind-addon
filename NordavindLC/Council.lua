@@ -133,6 +133,7 @@ function NLC.Council.AwardLater()
   table.insert(NLC.pendingSessions, activeSession)
   NLC.Utils.Print(activeSession.itemLink .. " lagt til ventende (" .. #NLC.pendingSessions .. " totalt)")
   activeSession = nil
+  NLC.UpdateMinimapCount()
 end
 
 function NLC.Council.ResumePending(index)
