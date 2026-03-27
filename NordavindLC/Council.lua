@@ -130,7 +130,7 @@ function NLC.Council.Award(playerName)
 
   -- Announce to raid chat
   if IsInRaid() then
-    SendChatMessage(activeSession.itemLink .. " -> " .. playerName, "RAID")
+    SendChatMessage(activeSession.itemLink .. " -> " .. playerName, "RAID_WARNING")
   end
 
   activeSession = nil
