@@ -36,15 +36,15 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
       local rollID = ...
       if rollID then
         local link = GetLootRollItemLink(rollID)
-        local isRecipe = false
+        local shouldPass = true
         if link then
-          local _, _, _, _, _, itemType, itemSubType = C_Item.GetItemInfo(link)
-          -- itemType "Recipe" covers all crafting recipes/patterns/plans
-          if itemType == "Recipe" or itemSubType == "Recipe" then
-            isRecipe = true
+          local _, _, _, _, _, itemType = C_Item.GetItemInfo(link)
+          -- Skip cosmetics and toys — let players roll on those themselves
+          if itemType == "Miscellaneous" or itemType == "Companion Pets" then
+            shouldPass = false
           end
         end
-        if not isRecipe then
+        if shouldPass then
           RollOnLoot(rollID, 0) -- 0 = Pass
         end
       end
