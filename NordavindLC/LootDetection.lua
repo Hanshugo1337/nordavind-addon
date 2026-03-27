@@ -31,12 +31,22 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
     droppedItems = {}
 
   elseif event == "START_LOOT_ROLL" then
-    -- Auto-pass for non-officers when addon is active
+    -- Auto-pass on gear/cosmetics/toys, but NOT recipes
     if not NLC.isOfficer then
-      local rollID, rollTime, lootHandle = ...
+      local rollID = ...
       if rollID then
-        RollOnLoot(rollID, 0) -- 0 = Pass
-        NLC.Utils.Print("Auto-pass (loot council aktiv)")
+        local link = GetLootRollItemLink(rollID)
+        local isRecipe = false
+        if link then
+          local _, _, _, _, _, itemType, itemSubType = C_Item.GetItemInfo(link)
+          -- itemType "Recipe" covers all crafting recipes/patterns/plans
+          if itemType == "Recipe" or itemSubType == "Recipe" then
+            isRecipe = true
+          end
+        end
+        if not isRecipe then
+          RollOnLoot(rollID, 0) -- 0 = Pass
+        end
       end
     end
 
