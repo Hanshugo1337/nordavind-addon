@@ -1,0 +1,16 @@
+## Interface: 110100
+## Title: NordavindLC
+## Notes: Nordavind Guild Loot Council
+## Author: Nordavind
+## Version: 1.0
+## SavedVariables: NordavindLC_DB, NordavindLC_Import
+
+Utils.lua
+Core.lua
+Comms.lua
+Scoring.lua
+LootDetection.lua
+Council.lua
+UI/ActivationPrompt.lua
+UI/CouncilFrame.lua
+UI/RankingFrame.lua

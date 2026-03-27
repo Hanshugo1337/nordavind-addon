@@ -1,0 +1,8 @@
+{
+  "name": "nordavind-companion",
+  "version": "1.0.0",
+  "description": "Bridge between NordavindLC WoW addon and nordavind-web API",
+  "main": "index.js",
+  "bin": { "nordavind-companion": "./index.js" },
+  "scripts": { "start": "node index.js" }
+}
