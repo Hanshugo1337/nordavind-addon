@@ -1,0 +1,7 @@
+package-as: NordavindLC
+
+ignore:
+  - companion
+  - "*.zip"
+  - .pkgmeta
+  - .gitignore
