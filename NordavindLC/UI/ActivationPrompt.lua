@@ -1,7 +1,7 @@
 -- UI/ActivationPrompt.lua
 -- "Vil du bruke NordavindLC?" prompt on login/leader change
 
-local _, NLC = ...
+local NLC = NordavindLC_NS
 
 local promptFrame = nil
 

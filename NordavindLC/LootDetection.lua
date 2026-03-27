@@ -1,7 +1,7 @@
 -- LootDetection.lua
 -- Detect loot drops from boss kills, build item list for officer
 
-local _, NLC = ...
+local NLC = NordavindLC_NS
 
 local lootFrame = CreateFrame("Frame")
 local isRegistered = false

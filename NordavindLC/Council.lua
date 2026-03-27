@@ -1,7 +1,7 @@
 -- Council.lua
 -- Council session management — interest collection, timer, award flow
 
-local _, NLC = ...
+local NLC = NordavindLC_NS
 
 local activeSession = nil
 

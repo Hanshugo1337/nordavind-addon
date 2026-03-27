@@ -1,7 +1,7 @@
 -- UI/CouncilFrame.lua
 -- Interest popup (all raiders) + loot detected panel (officer)
 
-local _, NLC = ...
+local NLC = NordavindLC_NS
 
 local interestFrame = nil
 

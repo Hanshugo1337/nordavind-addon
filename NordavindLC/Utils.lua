@@ -1,7 +1,8 @@
 -- Utils.lua
 -- Shared utility functions for NordavindLC
 
-local _, NLC = ...
+NordavindLC_NS = NordavindLC_NS or {}
+local NLC = NordavindLC_NS
 NLC.Utils = {}
 NLC.UI = {}
 NLC.Comms = {}

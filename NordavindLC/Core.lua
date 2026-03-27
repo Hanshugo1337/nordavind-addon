@@ -1,7 +1,8 @@
 -- Core.lua
 -- Main addon initialization, SavedVariables, slash commands
 
-local ADDON_NAME, NLC = ...
+local ADDON_NAME = ...
+local NLC = NordavindLC_NS
 
 -- State
 NLC.active = false

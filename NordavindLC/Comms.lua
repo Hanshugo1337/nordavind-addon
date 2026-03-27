@@ -1,7 +1,7 @@
 -- Comms.lua
 -- Addon message communication for raid-wide council sync
 
-local _, NLC = ...
+local NLC = NordavindLC_NS
 
 local PREFIX = "NordLC"
 local registered = false

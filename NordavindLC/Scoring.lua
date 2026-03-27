@@ -1,7 +1,7 @@
 -- Scoring.lua
 -- Calculate loot council score from imported web data + live in-game data
 
-local _, NLC = ...
+local NLC = NordavindLC_NS
 
 function NLC.Scoring.GetImportedScore(playerName)
   local players = NLC.db.importData and NLC.db.importData.players

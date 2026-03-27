@@ -1,7 +1,7 @@
 -- UI/RankingFrame.lua
 -- Ranked candidate list with award buttons (officer) and display (all)
 
-local _, NLC = ...
+local NLC = NordavindLC_NS
 
 local rankFrame = nil
 local RANK_COLORS = {
