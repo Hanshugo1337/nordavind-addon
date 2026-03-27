@@ -31,9 +31,9 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
     end
 
   elseif msgType == "INTEREST" then
-    local itemId, category, eqIlvl, tierCount = data:match("^(%d+):(%w+):(%d+):(%d+)$")
+    local itemId, category, eqIlvl, tierCount, note = data:match("^(%d+):(%w+):(%d+):(%d+):?(.*)$")
     if itemId and NLC.Council.OnInterestReceived then
-      NLC.Council.OnInterestReceived(sender, tonumber(itemId), category, tonumber(eqIlvl), tonumber(tierCount))
+      NLC.Council.OnInterestReceived(sender, tonumber(itemId), category, tonumber(eqIlvl), tonumber(tierCount), note)
     end
 
   elseif msgType == "AWARD" then

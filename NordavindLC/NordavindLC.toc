@@ -20,6 +20,7 @@ Comms.lua
 Scoring.lua
 LootDetection.lua
 Council.lua
+UI/Theme.lua
 UI/ActivationPrompt.lua
 UI/CouncilFrame.lua
 UI/RankingFrame.lua

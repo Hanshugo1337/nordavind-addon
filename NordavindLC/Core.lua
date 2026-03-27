@@ -206,8 +206,8 @@ SlashCmdList["NORDLC"] = function(msg)
   cmd = cmd:lower()
   local arg = trimmed:match("^%S+%s+(.+)$") or ""
 
-  if cmd == "council" then
-    -- Manual council: /nordlc council [item-link]
+  if cmd == "add" then
+    -- Manual council: /nordlc add [item-link]
     if not NLC.active then
       NLC.Utils.Print("Addon er ikke aktivert. Bruk /nordlc activate forst.")
       return
@@ -219,7 +219,7 @@ SlashCmdList["NORDLC"] = function(msg)
     -- arg contains the item link (preserved case)
     local itemLink = arg:match("|c.-|h.-|h|r")
     if not itemLink then
-      NLC.Utils.Print("Bruk: /nordlc council [shift-klikk item her]")
+      NLC.Utils.Print("Bruk: /nordlc add [shift-klikk item her]")
       return
     end
     local _, _, _, ilvl, _, _, _, _, equipLoc = C_Item.GetItemInfo(itemLink)
@@ -264,7 +264,7 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.Utils.Print("Kommandoer:")
     NLC.Utils.Print("  /nordlc activate — Aktiver addon")
     NLC.Utils.Print("  /nordlc deactivate — Deaktiver addon")
-    NLC.Utils.Print("  /nordlc council [item] — Start council for et item (shift-klikk)")
+    NLC.Utils.Print("  /nordlc add [item] — Start council for et item (shift-klikk)")
     NLC.Utils.Print("  /nordlc pending — Vis ventende items")
     NLC.Utils.Print("  /nordlc resume <nr> — Gjenoppta ventende item")
     NLC.Utils.Print("  /nordlc import — Last inn import-data")
