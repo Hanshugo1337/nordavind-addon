@@ -10,6 +10,7 @@ function NLC.LootDetection.Register()
   if isRegistered then return end
   lootFrame:RegisterEvent("ENCOUNTER_LOOT_RECEIVED")
   lootFrame:RegisterEvent("BOSS_KILL")
+  lootFrame:RegisterEvent("START_LOOT_ROLL")
   isRegistered = true
 end
 
@@ -28,6 +29,16 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
     local id, name = ...
     currentBoss = name or "Unknown Boss"
     droppedItems = {}
+
+  elseif event == "START_LOOT_ROLL" then
+    -- Auto-pass for non-officers when addon is active
+    if not NLC.isOfficer then
+      local rollID, rollTime, lootHandle = ...
+      if rollID then
+        RollOnLoot(rollID, 0) -- 0 = Pass
+        NLC.Utils.Print("Auto-pass (loot council aktiv)")
+      end
+    end
 
   elseif event == "ENCOUNTER_LOOT_RECEIVED" then
     local encounterID, itemID, itemLink, quantity, playerName, className = ...
