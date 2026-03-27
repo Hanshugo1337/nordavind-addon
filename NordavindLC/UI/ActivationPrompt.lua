@@ -1,12 +1,13 @@
 -- UI/ActivationPrompt.lua
 -- "Vil du bruke NordavindLC?" prompt on login/leader change
+-- Choice is saved per instance (map ID) so it only asks once per raid instance.
 
 local NLC = NordavindLC_NS
 local T = NLC.Theme
 
 local promptFrame = nil
 
-function NLC.UI.ShowActivationPrompt()
+function NLC.UI.ShowActivationPrompt(instanceKey)
   if promptFrame and promptFrame:IsShown() then return end
 
   if not promptFrame then
@@ -34,6 +35,10 @@ function NLC.UI.ShowActivationPrompt()
     jaBtn:SetPoint("BOTTOMLEFT", 35, 25)
     jaBtn:SetText("Ja")
     jaBtn:SetScript("OnClick", function()
+      if promptFrame.instanceKey then
+        NLC.db.instanceChoices = NLC.db.instanceChoices or {}
+        NLC.db.instanceChoices[promptFrame.instanceKey] = "yes"
+      end
       NLC.Activate()
       promptFrame:Hide()
     end)
@@ -43,14 +48,18 @@ function NLC.UI.ShowActivationPrompt()
     neiBtn:SetPoint("BOTTOMRIGHT", -35, 25)
     neiBtn:SetText("Nei")
     neiBtn:SetScript("OnClick", function()
+      if promptFrame.instanceKey then
+        NLC.db.instanceChoices = NLC.db.instanceChoices or {}
+        NLC.db.instanceChoices[promptFrame.instanceKey] = "no"
+      end
       promptFrame:Hide()
-      NLC.Utils.Print("Deaktivert. Bruk /nordlc activate for a aktivere.")
+      NLC.Utils.Print("Deaktivert for denne instansen. Bruk /nordlc activate for a aktivere.")
     end)
 
-    -- Close button top-right
     local closeBtn = CreateFrame("Button", nil, promptFrame, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", -2, -2)
   end
 
+  promptFrame.instanceKey = instanceKey
   promptFrame:Show()
 end

@@ -39,7 +39,17 @@ frame:SetScript("OnEvent", function(self, event, arg1)
     if IsInRaid() and not NLC.active then
       C_Timer.After(2, function()
         if IsInRaid() and not NLC.active then
-          NLC.UI.ShowActivationPrompt()
+          local _, _, _, _, _, _, _, instanceMapID = GetInstanceInfo()
+          local key = tostring(instanceMapID or 0)
+          NLC.db.instanceChoices = NLC.db.instanceChoices or {}
+          local choice = NLC.db.instanceChoices[key]
+          if choice == "yes" then
+            NLC.Activate()
+          elseif choice == "no" then
+            -- Already declined for this instance, don't ask again
+          else
+            NLC.UI.ShowActivationPrompt(key)
+          end
         end
       end)
     end
@@ -254,6 +264,9 @@ SlashCmdList["NORDLC"] = function(msg)
     else
       NLC.Utils.Print("Ingen import-data funnet. Kjor companion-appen forst.")
     end
+  elseif cmd == "reset" then
+    NLC.db.instanceChoices = {}
+    NLC.Utils.Print("Instance-valg nullstilt. Du blir spurt igjen neste gang.")
   elseif cmd == "status" then
     NLC.Utils.Print(NLC.active and "Aktiv" or "Inaktiv")
     NLC.Utils.Print("Officer: " .. (NLC.isOfficer and "Ja" or "Nei"))
@@ -268,6 +281,7 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.Utils.Print("  /nordlc pending — Vis ventende items")
     NLC.Utils.Print("  /nordlc resume <nr> — Gjenoppta ventende item")
     NLC.Utils.Print("  /nordlc import — Last inn import-data")
+    NLC.Utils.Print("  /nordlc reset — Nullstill instance-valg")
     NLC.Utils.Print("  /nordlc status — Vis status")
   end
 end
