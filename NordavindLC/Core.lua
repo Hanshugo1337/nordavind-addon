@@ -15,7 +15,7 @@ NLC.pendingSessions = {}
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
-frame:RegisterEvent("GROUP_LEADER_CHANGED")
+frame:RegisterEvent("PARTY_LEADER_CHANGED")
 frame:RegisterEvent("PLAYER_LOGOUT")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
@@ -35,7 +35,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
 
     NLC.Utils.Print("Lastet. Bruk /nordlc for kommandoer.")
 
-  elseif event == "PLAYER_ENTERING_WORLD" or event == "GROUP_LEADER_CHANGED" then
+  elseif event == "PLAYER_ENTERING_WORLD" or event == "PARTY_LEADER_CHANGED" then
     if IsInRaid() and not NLC.active then
       C_Timer.After(2, function()
         if IsInRaid() and not NLC.active then
