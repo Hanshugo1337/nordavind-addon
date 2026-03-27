@@ -60,8 +60,16 @@ function NLC.CheckOfficer()
   return false
 end
 
--- Minimap button
+-- Minimap button — orbits minimap edge like other addon icons
 local minimapBtn = nil
+local minimapAngle = 220 -- degrees, saved position around minimap
+
+local function UpdateMinimapPosition()
+  local rad = math.rad(minimapAngle)
+  local x = math.cos(rad) * 80
+  local y = math.sin(rad) * 80
+  minimapBtn:SetPoint("CENTER", Minimap, "CENTER", x, y)
+end
 
 function NLC.CreateMinimapButton()
   if minimapBtn then minimapBtn:Show(); return end
@@ -70,16 +78,14 @@ function NLC.CreateMinimapButton()
   minimapBtn:SetSize(32, 32)
   minimapBtn:SetFrameStrata("MEDIUM")
   minimapBtn:SetFrameLevel(8)
-  minimapBtn:SetPoint("TOPLEFT", Minimap, "TOPLEFT", 2, -2)
-  minimapBtn:SetMovable(true)
+  minimapBtn:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
   minimapBtn:EnableMouse(true)
   minimapBtn:RegisterForDrag("LeftButton")
 
   local icon = minimapBtn:CreateTexture(nil, "ARTWORK")
-  icon:SetSize(28, 28)
+  icon:SetSize(20, 20)
   icon:SetPoint("CENTER")
   icon:SetTexture("Interface\\AddOns\\NordavindLC\\logo")
-  icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
   minimapBtn.icon = icon
 
   local border = minimapBtn:CreateTexture(nil, "OVERLAY")
@@ -89,10 +95,16 @@ function NLC.CreateMinimapButton()
   minimapBtn.border = border
 
   -- Pending count text
-  local countText = minimapBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  countText:SetPoint("BOTTOM", 0, -2)
+  local countText = minimapBtn:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+  countText:SetPoint("BOTTOMRIGHT", 2, 2)
   countText:SetText("")
   minimapBtn.countText = countText
+
+  -- Restore saved angle
+  if NLC.db and NLC.db.minimapAngle then
+    minimapAngle = NLC.db.minimapAngle
+  end
+  UpdateMinimapPosition()
 
   minimapBtn:SetScript("OnClick", function(self, button)
     if button == "LeftButton" then
@@ -107,6 +119,26 @@ function NLC.CreateMinimapButton()
     end
   end)
   minimapBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+
+  -- Drag around minimap edge
+  local isDragging = false
+  minimapBtn:SetScript("OnDragStart", function(self)
+    isDragging = true
+    self:SetScript("OnUpdate", function()
+      local mx, my = Minimap:GetCenter()
+      local cx, cy = GetCursorPosition()
+      local scale = Minimap:GetEffectiveScale()
+      cx, cy = cx / scale, cy / scale
+      minimapAngle = math.deg(math.atan2(cy - my, cx - mx))
+      UpdateMinimapPosition()
+    end)
+  end)
+  minimapBtn:SetScript("OnDragStop", function(self)
+    isDragging = false
+    self:SetScript("OnUpdate", nil)
+    -- Save angle
+    if NLC.db then NLC.db.minimapAngle = minimapAngle end
+  end)
 
   minimapBtn:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
@@ -125,10 +157,6 @@ function NLC.CreateMinimapButton()
     GameTooltip:Show()
   end)
   minimapBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-  -- Dragging
-  minimapBtn:SetScript("OnDragStart", function(self) self:StartMoving() end)
-  minimapBtn:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
 
   minimapBtn:Show()
 end
