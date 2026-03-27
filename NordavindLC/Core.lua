@@ -132,8 +132,4 @@ SlashCmdList["NORDLC"] = function(msg)
   end
 end
 
-NLC.UI = NLC.UI or {}
-NLC.Comms = NLC.Comms or {}
-NLC.LootDetection = NLC.LootDetection or {}
-NLC.Council = NLC.Council or {}
-NLC.Scoring = NLC.Scoring or {}
+-- Namespaces initialized in Utils.lua

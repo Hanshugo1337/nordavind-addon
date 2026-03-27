@@ -3,6 +3,11 @@
 
 local _, NLC = ...
 NLC.Utils = {}
+NLC.UI = {}
+NLC.Comms = {}
+NLC.LootDetection = {}
+NLC.Council = {}
+NLC.Scoring = {}
 
 NLC.Utils.CLASS_COLORS = {
   DEATHKNIGHT = { r = 0.77, g = 0.12, b = 0.23 },
