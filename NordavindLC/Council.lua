@@ -17,7 +17,7 @@ function NLC.Council.StartSession(itemLink, itemId, ilvl, equipLoc, boss)
     ilvl = ilvl,
     equipLoc = equipLoc,
     boss = boss or "Unknown",
-    timer = NLC.db.config.timer or 30,
+    timer = NLC.db.config.timer or 180,
     interests = {},
     phase = "collecting",
   }
@@ -40,14 +40,15 @@ function NLC.Council.OnCouncilStart(itemLink, timer, sender)
   NLC.UI.ShowInterestPopup(itemLink, ilvl or 0, equipLoc or "", timer)
 end
 
-function NLC.Council.SendInterest(itemId, category)
+function NLC.Council.SendInterest(itemId, category, note)
   local equipLoc = activeSession and activeSession.equipLoc or ""
   local _, eqIlvl = NLC.Utils.GetEquippedInfo(equipLoc)
   local tierCount = NLC.Utils.GetTierCount()
-  NLC.Comms.Send("INTEREST", string.format("%d:%s:%d:%d", itemId or 0, category, eqIlvl, tierCount))
+  local noteStr = note and note:gsub(":", "") or ""
+  NLC.Comms.Send("INTEREST", string.format("%d:%s:%d:%d:%s", itemId or 0, category, eqIlvl, tierCount, noteStr))
 end
 
-function NLC.Council.OnInterestReceived(sender, itemId, category, eqIlvl, tierCount)
+function NLC.Council.OnInterestReceived(sender, itemId, category, eqIlvl, tierCount, note)
   if not activeSession or not NLC.isOfficer then return end
 
   local name = sender:match("^([^-]+)") or sender
@@ -58,6 +59,7 @@ function NLC.Council.OnInterestReceived(sender, itemId, category, eqIlvl, tierCo
     equippedIlvl = eqIlvl,
     tierCount = tierCount,
     class = class or "WARRIOR",
+    note = (note and note ~= "") and note or nil,
   }
 
   if NLC.UI.UpdateCouncilInterests then
@@ -98,6 +100,7 @@ function NLC.Council.BuildRanking(session)
       name = name,
       class = interest.class,
       category = interest.category,
+      note = interest.note,
       score = score,
       breakdown = breakdown,
       warnings = warnings,
