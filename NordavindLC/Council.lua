@@ -128,6 +128,11 @@ function NLC.Council.Award(playerName)
   NLC.RecordAward(activeSession.itemLink, playerName, UnitName("player"), activeSession.boss)
   NLC.Utils.Print(activeSession.itemLink .. " tildelt " .. playerName)
 
+  -- Announce to raid chat
+  if IsInRaid() then
+    SendChatMessage(activeSession.itemLink .. " -> " .. playerName, "RAID")
+  end
+
   activeSession = nil
 end
 
