@@ -5,6 +5,15 @@
 ## Version: 1.0
 ## SavedVariables: NordavindLC_DB, NordavindLC_Import
 
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\AceAddon-3.0\AceAddon-3.0.lua
+Libs\AceEvent-3.0\AceEvent-3.0.lua
+Libs\AceComm-3.0\ChatThrottleLib.lua
+Libs\AceComm-3.0\AceComm-3.0.lua
+Libs\AceSerializer-3.0\AceSerializer-3.0.lua
+Libs\LibDeflate\LibDeflate.lua
+
 Utils.lua
 Core.lua
 Comms.lua
