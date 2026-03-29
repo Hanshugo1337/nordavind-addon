@@ -19,10 +19,21 @@ function NLC.Comms.Send(msgType, data)
 end
 
 function NLC.Comms.OnMessage(prefix, message, channel, sender)
-  if prefix ~= PREFIX or not NLC.active then return end
+  if prefix ~= PREFIX then return end
 
   local msgType, data = message:match("^(%w+):(.*)$")
   if not msgType then return end
+
+  -- ACTIVATE is handled before active check (activates non-leader raiders)
+  if msgType == "ACTIVATE" then
+    if not NLC.active then
+      NLC.Activate()
+      NLC.Utils.Print("Aktivert av raid leader.")
+    end
+    return
+  end
+
+  if not NLC.active then return end
 
   if msgType == "SESSION_START" then
     local items = {}

@@ -40,6 +40,7 @@ function NLC.UI.ShowActivationPrompt(instanceKey)
         NLC.db.instanceChoices[promptFrame.instanceKey] = "yes"
       end
       NLC.Activate()
+      NLC.Comms.Send("ACTIVATE", "")
       promptFrame:Hide()
     end)
 

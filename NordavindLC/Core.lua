@@ -33,23 +33,30 @@ frame:SetScript("OnEvent", function(self, event, arg1)
       NLC.Utils.Print("Import-data lastet (" .. NLC.Utils.TableCount(NLC.db.importData.players) .. " spillere)")
     end
 
+    -- Always register comms so we can receive ACTIVATE from leader
+    NLC.Comms.Register()
     NLC.Utils.Print("Lastet. Bruk /nordlc for kommandoer.")
 
   elseif event == "PLAYER_ENTERING_WORLD" or event == "PARTY_LEADER_CHANGED" then
     if IsInRaid() and not NLC.active then
       C_Timer.After(2, function()
         if IsInRaid() and not NLC.active then
-          local _, _, _, _, _, _, _, instanceMapID = GetInstanceInfo()
-          local key = tostring(instanceMapID or 0)
-          NLC.db.instanceChoices = NLC.db.instanceChoices or {}
-          local choice = NLC.db.instanceChoices[key]
-          if choice == "yes" then
-            NLC.Activate()
-          elseif choice == "no" then
-            -- Already declined for this instance, don't ask again
-          else
-            NLC.UI.ShowActivationPrompt(key)
+          if UnitIsGroupLeader("player") then
+            -- Only leader gets the activation prompt
+            local _, _, _, _, _, _, _, instanceMapID = GetInstanceInfo()
+            local key = tostring(instanceMapID or 0)
+            NLC.db.instanceChoices = NLC.db.instanceChoices or {}
+            local choice = NLC.db.instanceChoices[key]
+            if choice == "yes" then
+              NLC.Activate()
+              NLC.Comms.Send("ACTIVATE", "")
+            elseif choice == "no" then
+              -- Already declined for this instance, don't ask again
+            else
+              NLC.UI.ShowActivationPrompt(key)
+            end
           end
+          -- Non-leaders activate when they receive ACTIVATE from leader
         end
       end)
     end
