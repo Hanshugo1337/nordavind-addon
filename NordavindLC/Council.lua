@@ -283,6 +283,27 @@ function NLC.Council.ResumePending(index)
   session.phase = "ranking"
   session.ranked = NLC.Council.BuildRanking(session)
   NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
+  NLC.UpdateMinimapCount()
+end
+
+function NLC.Council.ResumeAll()
+  if #NLC.pendingSessions == 0 then
+    NLC.Utils.Print("Ingen ventende items.")
+    return
+  end
+
+  activeSessions = {}
+  for _, session in ipairs(NLC.pendingSessions) do
+    session.phase = "ranking"
+    session.ranked = NLC.Council.BuildRanking(session)
+    table.insert(activeSessions, session)
+  end
+  NLC.pendingSessions = {}
+  NLC.UpdateMinimapCount()
+
+  currentWizardIndex = 1
+  NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
+  NLC.Utils.Print("Wizard apnet med " .. #activeSessions .. " ventende items.")
 end
 
 function NLC.Council.OnAward(itemLink, playerName, sender)

@@ -251,11 +251,15 @@ SlashCmdList["NORDLC"] = function(msg)
       NLC.Utils.Print("Ingen ventende items.")
     end
   elseif cmd == "resume" then
-    local idx = tonumber(arg)
-    if idx then
-      NLC.Council.ResumePending(idx)
+    if arg == "all" then
+      NLC.Council.ResumeAll()
     else
-      NLC.Utils.Print("Bruk: /nordlc resume <nummer>")
+      local idx = tonumber(arg)
+      if idx then
+        NLC.Council.ResumePending(idx)
+      else
+        NLC.Utils.Print("Bruk: /nordlc resume <nummer> eller /nordlc resume all")
+      end
     end
   elseif cmd == "import" then
     if NordavindLC_Import and NordavindLC_Import.players then
@@ -371,6 +375,7 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.Utils.Print("  /nordlc add [item] — Start council for et item (shift-klikk)")
     NLC.Utils.Print("  /nordlc pending — Vis ventende items")
     NLC.Utils.Print("  /nordlc resume <nr> — Gjenoppta ventende item")
+    NLC.Utils.Print("  /nordlc resume all — Gjenoppta alle ventende i wizard")
     NLC.Utils.Print("  /nordlc import — Last inn import-data")
     NLC.Utils.Print("  /nordlc reset — Nullstill instance-valg")
     NLC.Utils.Print("  /nordlc test — Test wizard med mock-data")
