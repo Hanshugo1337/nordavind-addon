@@ -56,6 +56,9 @@ function NLC.Scoring.GetWarnings(imported)
   if imported.wclParse and imported.wclParse < 25 then
     table.insert(warnings, string.format("Lav parse: %d", imported.wclParse))
   end
+  if imported.defensives and imported.defensives < 0.8 then
+    table.insert(warnings, string.format("Lave defensives: %.1f/kamp", imported.defensives))
+  end
   if imported.lootThisWeek and imported.lootThisWeek > 0 then
     table.insert(warnings, string.format("%d loot denne uken", imported.lootThisWeek))
   end

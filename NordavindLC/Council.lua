@@ -128,6 +128,13 @@ function NLC.Council.Award(playerName)
   NLC.RecordAward(activeSession.itemLink, playerName, UnitName("player"), activeSession.boss)
   NLC.Utils.Print(activeSession.itemLink .. " tildelt " .. playerName)
 
+  -- Live recalculate: bump lootThisWeek so next item scores reflect this award
+  local imported = NLC.Scoring.GetImportedScore(playerName)
+  if imported then
+    imported.lootThisWeek = (imported.lootThisWeek or 0) + 1
+    imported.baseScore = (imported.baseScore or 0) - 15
+  end
+
   -- Announce to raid chat
   if IsInRaid() then
     SendChatMessage(activeSession.itemLink .. " -> " .. playerName, "RAID_WARNING")

@@ -273,6 +273,107 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.Utils.Print("Import: " .. NLC.Utils.TableCount(NLC.db.importData.players or {}) .. " spillere")
     NLC.Utils.Print("Ventende: " .. #NLC.pendingSessions .. " items")
     NLC.Utils.Print("Eksport-ko: " .. #(NLC.db.pendingExport or {}) .. " awards")
+  elseif cmd == "test" then
+    NLC.isOfficer = true
+    NLC.active = true
+
+    -- Mock imported scoring data
+    NLC.db.importData = NLC.db.importData or {}
+    NLC.db.importData.players = NLC.db.importData.players or {}
+
+    -- Only seed mock data on first run (so scores persist between test rounds)
+    if not NLC._testSeeded then
+      local testPlayers = {
+        { name = "Testwarrior",  class = "WARRIOR",  rank = "raider", attendance = 95, wclParse = 92, defensives = 1.8, baseScore = 38.5 },
+        { name = "Testshaman",   class = "SHAMAN",   rank = "raider", attendance = 90, wclParse = 88, defensives = 2.1, baseScore = 36.2 },
+        { name = "Testpaladin",  class = "PALADIN",  rank = "raider", attendance = 85, wclParse = 95, defensives = 0.6, baseScore = 32.0 },
+        { name = "Testmage",     class = "MAGE",     rank = "trial",  attendance = 70, wclParse = 97, defensives = 0.3, baseScore = 25.8 },
+        { name = "Testrogue",    class = "ROGUE",    rank = "backup", attendance = 80, wclParse = 90, defensives = 1.2, baseScore = 30.5 },
+      }
+      for _, p in ipairs(testPlayers) do
+        NLC.db.importData.players[p.name] = {
+          attendance = p.attendance, wclParse = p.wclParse, defensives = p.defensives,
+          baseScore = p.baseScore, rank = p.rank, lootThisWeek = 0, lootTotal = 2,
+          mplusEffort = 10, role = "dps", deathPenalty = 0,
+        }
+      end
+      NLC._testSeeded = true
+      NLC.Utils.Print("Mock-data opprettet (5 test-spillere)")
+    end
+
+    -- Build a fake council session
+    local fakeSession = {
+      itemLink = "|cffa335ee|Hitem:123456::::::::80:::::|h[Test Chestplate]|h|r",
+      itemId = 123456, ilvl = 639, equipLoc = "INVTYPE_CHEST",
+      boss = "Test Boss", timer = 999, interests = {}, phase = "ranking",
+    }
+    local testInterests = {
+      { name = "Testwarrior",  class = "WARRIOR",  cat = "upgrade",  tier = 3 },
+      { name = "Testshaman",   class = "SHAMAN",   cat = "upgrade",  tier = 3 },
+      { name = "Testpaladin",  class = "PALADIN",  cat = "upgrade",  tier = 1 },
+      { name = "Testmage",     class = "MAGE",     cat = "catalyst", tier = 1 },
+      { name = "Testrogue",    class = "ROGUE",    cat = "upgrade",  tier = 2 },
+    }
+    for _, p in ipairs(testInterests) do
+      fakeSession.interests[p.name] = {
+        category = p.cat, equippedIlvl = 626, tierCount = p.tier, class = p.class,
+      }
+    end
+
+    -- Patch Council.Award for test mode (no comms/raid needed)
+    if not NLC.Council._origAward then
+      NLC.Council._origAward = NLC.Council.Award
+    end
+    NLC.Council._testSession = fakeSession
+    NLC.Council.Award = function(playerName)
+      local session = NLC.Council._testSession
+      if not session then return end
+
+      NLC.Utils.Print(session.itemLink .. " tildelt " .. playerName)
+
+      local imported = NLC.Scoring.GetImportedScore(playerName)
+      if imported then
+        imported.lootThisWeek = (imported.lootThisWeek or 0) + 1
+        imported.baseScore = (imported.baseScore or 0) - 15
+        NLC.Utils.Print("|cffff8800" .. playerName .. ": score " .. string.format("%.1f", imported.baseScore) .. " (loot denne uken: " .. imported.lootThisWeek .. ")|r")
+      end
+      NLC.Council._testSession = nil
+    end
+
+    local ranked = NLC.Council.BuildRanking(fakeSession)
+    NLC.UI.ShowRanking(fakeSession, ranked)
+    NLC.Utils.Print("Test council vist. Klikk 'Tildel', deretter /nordlc test igjen for a se oppdaterte scores.")
+
+  elseif cmd == "testpopup" then
+    NLC.UI.ShowInterestPopup(
+      "|cffa335ee|Hitem:123456::::::::80:::::|h[Test Chestplate]|h|r",
+      639, "INVTYPE_CHEST", 30
+    )
+    NLC.Utils.Print("Test interest popup vist.")
+
+  elseif cmd == "testloot" then
+    NLC.isOfficer = true
+    NLC.active = true
+    -- Simulate boss loot drop with multiple items
+    local fakeItems = {
+      { itemLink = "|cffa335ee|Hitem:111111::::::::80:::::|h[Void-Touched Chestplate]|h|r", itemId = 111111, ilvl = 639, equipLoc = "INVTYPE_CHEST", boss = "Test Boss", looter = "Player1" },
+      { itemLink = "|cffa335ee|Hitem:222222::::::::80:::::|h[Dreamrift Shoulders]|h|r", itemId = 222222, ilvl = 639, equipLoc = "INVTYPE_SHOULDER", boss = "Test Boss", looter = "Player2" },
+      { itemLink = "|cffa335ee|Hitem:333333::::::::80:::::|h[Quel'Danas Legguards]|h|r", itemId = 333333, ilvl = 636, equipLoc = "INVTYPE_LEGS", boss = "Test Boss", looter = "Player3" },
+      { itemLink = "|cffa335ee|Hitem:444444::::::::80:::::|h[Voidspire Trinket]|h|r", itemId = 444444, ilvl = 639, equipLoc = "INVTYPE_TRINKET", boss = "Test Boss", looter = "Player1" },
+    }
+    NLC.UI.ShowLootDetected(fakeItems)
+    NLC.Utils.Print("Test loot panel vist med 4 items. Fjern de du ikke vil ha, trykk Start Council.")
+
+  elseif cmd == "testend" then
+    -- Clean up test mode
+    if NLC.Council._origAward then
+      NLC.Council.Award = NLC.Council._origAward
+      NLC.Council._origAward = nil
+    end
+    NLC._testSeeded = nil
+    NLC.Council._testSession = nil
+    NLC.Utils.Print("Test-modus avsluttet.")
+
   else
     NLC.Utils.Print("Kommandoer:")
     NLC.Utils.Print("  /nordlc activate — Aktiver addon")
@@ -282,6 +383,8 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.Utils.Print("  /nordlc resume <nr> — Gjenoppta ventende item")
     NLC.Utils.Print("  /nordlc import — Last inn import-data")
     NLC.Utils.Print("  /nordlc reset — Nullstill instance-valg")
+    NLC.Utils.Print("  /nordlc test — Test council med mock-data")
+    NLC.Utils.Print("  /nordlc testend — Avslutt test-modus")
     NLC.Utils.Print("  /nordlc status — Vis status")
   end
 end

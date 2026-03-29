@@ -18,10 +18,27 @@ local CATEGORY_LABELS = {
   tmog     = T.GOLD .. "Tmog|r",
 }
 
+-- Column positions (x offsets)
+local COL = {
+  rank  = 14,
+  name  = 100,
+  score = 270,
+  ilvl  = 360,
+  tier  = 440,
+  info  = 500,
+  award = -14,
+}
+
+local ROW_HEIGHT = 44
+local NOTE_HEIGHT = 20
+local CAT_HEADER_HEIGHT = 32
+local FRAME_WIDTH = 820
+local FRAME_HEIGHT = 560
+
 function NLC.UI.ShowRanking(session, candidates)
   if not rankFrame then
     rankFrame = CreateFrame("Frame", "NordavindLCRanking", UIParent, "BackdropTemplate")
-    rankFrame:SetSize(640, 520)
+    rankFrame:SetSize(FRAME_WIDTH, FRAME_HEIGHT)
     rankFrame:SetPoint("CENTER")
     rankFrame:SetMovable(true)
     rankFrame:EnableMouse(true)
@@ -37,14 +54,14 @@ function NLC.UI.ShowRanking(session, candidates)
     closeX:SetPoint("TOPRIGHT", -2, -2)
 
     -- Column headers
-    local hdrY = -40
+    local hdrY = -44
     local headers = {
-      { text = "RANK",  x = 10 },
-      { text = "NAVN",  x = 78 },
-      { text = "SCORE", x = 220 },
-      { text = "ILVL",  x = 290 },
-      { text = "TIER",  x = 360 },
-      { text = "INFO",  x = 420 },
+      { text = "RANK",  x = COL.rank },
+      { text = "NAVN",  x = COL.name },
+      { text = "SCORE", x = COL.score },
+      { text = "ILVL",  x = COL.ilvl },
+      { text = "TIER",  x = COL.tier },
+      { text = "INFO",  x = COL.info },
     }
     for _, h in ipairs(headers) do
       local ht = rankFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -54,37 +71,36 @@ function NLC.UI.ShowRanking(session, candidates)
 
     -- Header separator
     local hdrSep = rankFrame:CreateTexture(nil, "ARTWORK")
-    hdrSep:SetPoint("TOPLEFT", 10, hdrY - 14)
-    hdrSep:SetPoint("TOPRIGHT", -30, hdrY - 14)
+    hdrSep:SetPoint("TOPLEFT", 12, hdrY - 16)
+    hdrSep:SetPoint("TOPRIGHT", -30, hdrY - 16)
     hdrSep:SetHeight(1)
-    hdrSep:SetColorTexture(0.788, 0.659, 0.298, 0.25)
+    hdrSep:SetColorTexture(0.788, 0.659, 0.298, 0.3)
 
+    -- Scroll area
     rankFrame.scrollFrame = CreateFrame("ScrollFrame", nil, rankFrame, "UIPanelScrollFrameTemplate")
-    rankFrame.scrollFrame:SetPoint("TOPLEFT", 10, hdrY - 18)
-    rankFrame.scrollFrame:SetPoint("BOTTOMRIGHT", -32, 58)
+    rankFrame.scrollFrame:SetPoint("TOPLEFT", 12, hdrY - 20)
+    rankFrame.scrollFrame:SetPoint("BOTTOMRIGHT", -32, 60)
 
     rankFrame.scrollChild = CreateFrame("Frame")
     rankFrame.scrollFrame:SetScrollChild(rankFrame.scrollChild)
-    rankFrame.scrollChild:SetSize(570, 1)
+    rankFrame.scrollChild:SetSize(FRAME_WIDTH - 50, 1)
 
-    rankFrame.laterBtn = CreateFrame("Button", nil, rankFrame, "UIPanelButtonTemplate")
-    rankFrame.laterBtn:SetSize(150, 32)
-    rankFrame.laterBtn:SetPoint("BOTTOMLEFT", 20, 18)
-    rankFrame.laterBtn:SetText("Award Later")
+    -- Bottom buttons
+    rankFrame.laterBtn = T.CreateButton(rankFrame, 160, 34, "Award Later")
+    rankFrame.laterBtn:SetPoint("BOTTOMLEFT", 20, 16)
     rankFrame.laterBtn:SetScript("OnClick", function()
       NLC.Council.AwardLater()
       rankFrame:Hide()
     end)
 
-    rankFrame.closeBtn = CreateFrame("Button", nil, rankFrame, "UIPanelButtonTemplate")
-    rankFrame.closeBtn:SetSize(110, 32)
-    rankFrame.closeBtn:SetPoint("BOTTOMRIGHT", -20, 18)
-    rankFrame.closeBtn:SetText("Lukk")
+    rankFrame.closeBtn = T.CreateButton(rankFrame, 120, 34, "Lukk")
+    rankFrame.closeBtn:SetPoint("BOTTOMRIGHT", -20, 16)
     rankFrame.closeBtn:SetScript("OnClick", function()
       rankFrame:Hide()
     end)
   end
 
+  -- Update title with item link
   rankFrame.title:SetText(T.GOLD .. "Loot Council|r  " .. T.MUTED .. "—|r  " .. (session.itemLink or "?"))
   rankFrame.laterBtn:SetShown(NLC.isOfficer)
 
@@ -92,7 +108,6 @@ function NLC.UI.ShowRanking(session, candidates)
   for _, child in ipairs({ rankFrame.scrollChild:GetChildren() }) do
     child:Hide()
   end
-  -- Also hide fontstrings/textures from previous render
   for _, region in ipairs({ rankFrame.scrollChild:GetRegions() }) do
     region:Hide()
   end
@@ -104,99 +119,105 @@ function NLC.UI.ShowRanking(session, candidates)
     -- Category header
     if c.category ~= currentCat then
       currentCat = c.category
-      if yOffset > 0 then yOffset = yOffset + 12 end
+      if yOffset > 0 then yOffset = yOffset + 8 end
+
+      local catBg = rankFrame.scrollChild:CreateTexture(nil, "BACKGROUND")
+      catBg:SetPoint("TOPLEFT", 0, -yOffset)
+      catBg:SetSize(FRAME_WIDTH - 50, CAT_HEADER_HEIGHT)
+      catBg:SetColorTexture(0.788, 0.659, 0.298, 0.06)
+      catBg:Show()
 
       local header = rankFrame.scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-      header:SetPoint("TOPLEFT", 8, -yOffset)
+      header:SetPoint("TOPLEFT", COL.rank, -yOffset - 8)
       header:SetText(CATEGORY_LABELS[currentCat] or currentCat)
       header:Show()
-      yOffset = yOffset + 22
 
       local sep = rankFrame.scrollChild:CreateTexture(nil, "ARTWORK")
-      sep:SetPoint("TOPLEFT", 8, -yOffset)
-      sep:SetWidth(555)
+      sep:SetPoint("TOPLEFT", 4, -yOffset - CAT_HEADER_HEIGHT)
+      sep:SetWidth(FRAME_WIDTH - 60)
       sep:SetHeight(1)
-      sep:SetColorTexture(0.3, 0.3, 0.3, 0.4)
+      sep:SetColorTexture(0.3, 0.3, 0.3, 0.3)
       sep:Show()
-      yOffset = yOffset + 8
+
+      yOffset = yOffset + CAT_HEADER_HEIGHT + 2
     end
 
-    -- Alternating row bg
+    -- Alternating row background
     local rowBg = rankFrame.scrollChild:CreateTexture(nil, "BACKGROUND")
     rowBg:SetPoint("TOPLEFT", 0, -yOffset)
-    rowBg:SetSize(570, 36)
-    rowBg:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.03 or 0)
+    rowBg:SetSize(FRAME_WIDTH - 50, ROW_HEIGHT)
+    rowBg:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.04 or 0)
     rowBg:Show()
 
     local row = CreateFrame("Frame", nil, rankFrame.scrollChild)
-    row:SetSize(570, 36)
+    row:SetSize(FRAME_WIDTH - 50, ROW_HEIGHT)
     row:SetPoint("TOPLEFT", 0, -yOffset)
     row:Show()
 
     -- Rank badge
     local rc = RANK_COLORS[c.rank] or RANK_COLORS.trial
     local rankText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    rankText:SetPoint("LEFT", 10, 0)
+    rankText:SetPoint("LEFT", COL.rank, 0)
+    rankText:SetWidth(80)
+    rankText:SetJustifyH("LEFT")
     rankText:SetText(string.format("|cff%02x%02x%02x%s|r", rc.r * 255, rc.g * 255, rc.b * 255, (c.rank or "?"):upper()))
 
-    -- Name (class colored)
+    -- Name (class colored, larger font)
     local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    nameText:SetPoint("LEFT", 78, 0)
+    nameText:SetPoint("LEFT", COL.name, 0)
     nameText:SetText(NLC.Utils.ClassColoredName(c.name, c.class))
 
     -- Score (gold, prominent)
     local scoreText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    scoreText:SetPoint("LEFT", 220, 0)
+    scoreText:SetPoint("LEFT", COL.score, 0)
     scoreText:SetText(T.GOLD_LIGHT .. string.format("%.1f", c.score) .. "|r")
 
     -- ilvl diff
     local ilvlText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    ilvlText:SetPoint("LEFT", 290, 0)
+    ilvlText:SetPoint("LEFT", COL.ilvl, 0)
     local diffColor = (c.ilvlDiff or 0) > 0 and T.GREEN or T.RED
     ilvlText:SetText(diffColor .. ((c.ilvlDiff or 0) > 0 and "+" or "") .. (c.ilvlDiff or 0) .. " ilvl|r")
 
-    -- Tier
+    -- Tier count
     local tierText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    tierText:SetPoint("LEFT", 360, 0)
+    tierText:SetPoint("LEFT", COL.tier, 0)
     local tierColor = (c.tierCount == 1 or c.tierCount == 3) and T.GREEN or T.WHITE
     tierText:SetText(tierColor .. (c.tierCount or 0) .. "pc|r")
 
     -- Warnings
     if c.warnings and #c.warnings > 0 then
       local warnText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-      warnText:SetPoint("LEFT", 420, 0)
-      warnText:SetWidth(80)
+      warnText:SetPoint("LEFT", COL.info, 0)
+      warnText:SetWidth(200)
       warnText:SetJustifyH("LEFT")
-      warnText:SetText(T.ORANGE .. table.concat(c.warnings, " ") .. "|r")
+      warnText:SetText(T.ORANGE .. table.concat(c.warnings, "\n") .. "|r")
     end
 
     -- Award button (officer only)
     if NLC.isOfficer then
-      local awardBtn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-      awardBtn:SetSize(75, 28)
-      awardBtn:SetPoint("RIGHT", -8, 0)
-      awardBtn:SetText("Tildel")
+      local awardBtn = T.CreateButton(row, 80, 30, "Tildel")
+      awardBtn:SetPoint("RIGHT", COL.award, 0)
       awardBtn:SetScript("OnClick", function()
         NLC.Council.Award(c.name)
         rankFrame:Hide()
       end)
     end
 
-    yOffset = yOffset + 38
+    yOffset = yOffset + ROW_HEIGHT
 
-    -- Note
+    -- Note (if any)
     if c.note then
       local noteRow = CreateFrame("Frame", nil, rankFrame.scrollChild)
-      noteRow:SetSize(570, 18)
+      noteRow:SetSize(FRAME_WIDTH - 50, NOTE_HEIGHT)
       noteRow:SetPoint("TOPLEFT", 0, -yOffset)
       noteRow:Show()
       local noteText = noteRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-      noteText:SetPoint("LEFT", 83, 0)
+      noteText:SetPoint("LEFT", COL.name + 4, 0)
       noteText:SetText(T.MUTED .. ">> " .. c.note .. "|r")
-      yOffset = yOffset + 20
+      yOffset = yOffset + NOTE_HEIGHT
     end
   end
 
-  rankFrame.scrollChild:SetHeight(yOffset + 30)
+  rankFrame.scrollChild:SetHeight(yOffset + 40)
   rankFrame:Show()
 end
