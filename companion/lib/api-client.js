@@ -8,7 +8,7 @@ class ApiClient {
 
   async exportScoring() {
     const res = await fetch(`${this.baseUrl}/api/loot/addon-export`, {
-      headers: { "x-api-key": this.apiKey },
+      headers: { "x-api-key": this.apiKey, "Host": "nordavind.cc" },
       signal: AbortSignal.timeout(30000),
     });
     if (!res.ok) throw new Error(`Export failed: ${res.status} ${await res.text()}`);
@@ -18,7 +18,7 @@ class ApiClient {
   async awardLoot({ item, awardedTo, awardedBy, boss, timestamp }) {
     const res = await fetch(`${this.baseUrl}/api/loot/addon`, {
       method: "POST",
-      headers: { "x-api-key": this.apiKey, "Content-Type": "application/json" },
+      headers: { "x-api-key": this.apiKey, "Content-Type": "application/json", "Host": "nordavind.cc" },
       body: JSON.stringify({ item, awardedTo, awardedBy, boss, timestamp }),
       signal: AbortSignal.timeout(10000),
     });

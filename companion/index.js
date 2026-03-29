@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 "use strict";
 
+// Allow self-signed cert when connecting to server via IP
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 const fs = require("fs");
 const path = require("path");
 const { ApiClient } = require("./lib/api-client");
