@@ -199,7 +199,7 @@ function NLC.UI.ShowRanking(session, candidates)
       awardBtn:SetPoint("RIGHT", COL.award, 0)
       awardBtn:SetScript("OnClick", function()
         NLC.Council.Award(c.name)
-        rankFrame:Hide()
+        -- Don't hide rankFrame here — wizard AdvanceWizard handles it
       end)
     end
 
@@ -220,4 +220,96 @@ function NLC.UI.ShowRanking(session, candidates)
 
   rankFrame.scrollChild:SetHeight(yOffset + 40)
   rankFrame:Show()
+end
+
+function NLC.UI.ShowWizard(sessions, index)
+  local session = sessions[index]
+  if not session then return end
+
+  local ranked = session.ranked or {}
+  local total = #sessions
+
+  -- Use existing ShowRanking to render the candidates
+  NLC.UI.ShowRanking(session, ranked)
+
+  -- Update title with progress
+  rankFrame.title:SetText(T.GOLD .. "Loot Council|r  " .. T.MUTED .. "— Item " .. index .. " / " .. total .. "|r")
+
+  -- Show item info below title
+  if not rankFrame.itemInfo then
+    rankFrame.itemInfo = rankFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    rankFrame.itemInfo:SetPoint("TOP", 0, -34)
+  end
+  rankFrame.itemInfo:SetText((session.itemLink or "?") .. "  " .. T.MUTED .. "ilvl " .. (session.ilvl or 0) .. "|r")
+  rankFrame.itemInfo:Show()
+
+  -- Navigation arrows
+  if not rankFrame.prevBtn then
+    rankFrame.prevBtn = T.CreateButton(rankFrame, 40, 34, "<")
+    rankFrame.prevBtn:SetPoint("TOPLEFT", 20, -6)
+  end
+  if not rankFrame.nextBtn then
+    rankFrame.nextBtn = T.CreateButton(rankFrame, 40, 34, ">")
+    rankFrame.nextBtn:SetPoint("TOPRIGHT", -40, -6)
+  end
+
+  rankFrame.prevBtn:SetScript("OnClick", function()
+    for i = index - 1, 1, -1 do
+      if sessions[i].phase == "ranking" then
+        NLC.Council.SetWizardIndex(i)
+        return
+      end
+    end
+  end)
+  rankFrame.nextBtn:SetScript("OnClick", function()
+    for i = index + 1, #sessions do
+      if sessions[i].phase == "ranking" then
+        NLC.Council.SetWizardIndex(i)
+        return
+      end
+    end
+  end)
+
+  -- Enable/disable based on available items
+  local hasPrev = false
+  for i = index - 1, 1, -1 do
+    if sessions[i].phase == "ranking" then hasPrev = true; break end
+  end
+  local hasNext = false
+  for i = index + 1, #sessions do
+    if sessions[i].phase == "ranking" then hasNext = true; break end
+  end
+  rankFrame.prevBtn:SetEnabled(hasPrev)
+  rankFrame.nextBtn:SetEnabled(hasNext)
+  rankFrame.prevBtn:Show()
+  rankFrame.nextBtn:Show()
+
+  -- "No interest" skip button if no candidates
+  if #ranked == 0 then
+    if not rankFrame.skipBtn then
+      rankFrame.skipBtn = T.CreateButton(rankFrame, 200, 40, T.MUTED .. "Ingen interesse — Skip|r")
+      rankFrame.skipBtn:SetPoint("CENTER", 0, 0)
+    end
+    rankFrame.skipBtn:SetScript("OnClick", function()
+      NLC.Council.SkipCurrent()
+    end)
+    rankFrame.skipBtn:Show()
+  elseif rankFrame.skipBtn then
+    rankFrame.skipBtn:Hide()
+  end
+
+  -- Update Award Later button for wizard
+  rankFrame.laterBtn:SetScript("OnClick", function()
+    NLC.Council.AwardLaterCurrent()
+  end)
+end
+
+function NLC.UI.HideWizard()
+  if rankFrame then
+    rankFrame:Hide()
+    if rankFrame.itemInfo then rankFrame.itemInfo:Hide() end
+    if rankFrame.prevBtn then rankFrame.prevBtn:Hide() end
+    if rankFrame.nextBtn then rankFrame.nextBtn:Hide() end
+    if rankFrame.skipBtn then rankFrame.skipBtn:Hide() end
+  end
 end
