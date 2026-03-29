@@ -23,7 +23,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
     NordavindLC_DB = NordavindLC_DB or {
       importData = { players = {} },
       lootHistory = {},
-      config = { officers = {}, timer = 30 },
+      config = { officers = {}, timer = 90 },
       pendingExport = {},
     }
     NLC.db = NordavindLC_DB
@@ -281,7 +281,6 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.db.importData = NLC.db.importData or {}
     NLC.db.importData.players = NLC.db.importData.players or {}
 
-    -- Only seed mock data on first run (so scores persist between test rounds)
     if not NLC._testSeeded then
       local testPlayers = {
         { name = "Testwarrior",  class = "WARRIOR",  rank = "raider", attendance = 95, wclParse = 92, defensives = 1.8, baseScore = 38.5 },
@@ -301,55 +300,46 @@ SlashCmdList["NORDLC"] = function(msg)
       NLC.Utils.Print("Mock-data opprettet (5 test-spillere)")
     end
 
-    -- Build a fake council session
-    local fakeSession = {
-      itemLink = "|cffa335ee|Hitem:123456::::::::80:::::|h[Test Chestplate]|h|r",
-      itemId = 123456, ilvl = 639, equipLoc = "INVTYPE_CHEST",
-      boss = "Test Boss", timer = 999, interests = {}, phase = "ranking",
+    local fakeItems = {
+      { itemLink = "|cffa335ee|Hitem:111111::::::::80:::::|h[Void-Touched Chestplate]|h|r", itemId = 111111, ilvl = 639, equipLoc = "INVTYPE_CHEST", boss = "Test Boss" },
+      { itemLink = "|cffa335ee|Hitem:222222::::::::80:::::|h[Dreamrift Shoulders]|h|r", itemId = 222222, ilvl = 639, equipLoc = "INVTYPE_SHOULDER", boss = "Test Boss" },
+      { itemLink = "|cffa335ee|Hitem:333333::::::::80:::::|h[Quel'Danas Legguards]|h|r", itemId = 333333, ilvl = 636, equipLoc = "INVTYPE_LEGS", boss = "Test Boss" },
     }
+
+    local fakeSessions = {}
     local testInterests = {
       { name = "Testwarrior",  class = "WARRIOR",  cat = "upgrade",  tier = 3 },
       { name = "Testshaman",   class = "SHAMAN",   cat = "upgrade",  tier = 3 },
-      { name = "Testpaladin",  class = "PALADIN",  cat = "upgrade",  tier = 1 },
+      { name = "Testpaladin",  class = "PALADIN",  cat = "catalyst", tier = 1 },
       { name = "Testmage",     class = "MAGE",     cat = "catalyst", tier = 1 },
       { name = "Testrogue",    class = "ROGUE",    cat = "upgrade",  tier = 2 },
     }
-    for _, p in ipairs(testInterests) do
-      fakeSession.interests[p.name] = {
-        category = p.cat, equippedIlvl = 626, tierCount = p.tier, class = p.class,
+
+    for _, item in ipairs(fakeItems) do
+      local session = {
+        itemLink = item.itemLink, itemId = item.itemId, ilvl = item.ilvl,
+        equipLoc = item.equipLoc, boss = item.boss,
+        timer = 999, interests = {}, phase = "ranking",
       }
-    end
-
-    -- Patch Council.Award for test mode (no comms/raid needed)
-    if not NLC.Council._origAward then
-      NLC.Council._origAward = NLC.Council.Award
-    end
-    NLC.Council._testSession = fakeSession
-    NLC.Council.Award = function(playerName)
-      local session = NLC.Council._testSession
-      if not session then return end
-
-      NLC.Utils.Print(session.itemLink .. " tildelt " .. playerName)
-
-      local imported = NLC.Scoring.GetImportedScore(playerName)
-      if imported then
-        imported.lootThisWeek = (imported.lootThisWeek or 0) + 1
-        imported.baseScore = (imported.baseScore or 0) - 15
-        NLC.Utils.Print("|cffff8800" .. playerName .. ": score " .. string.format("%.1f", imported.baseScore) .. " (loot denne uken: " .. imported.lootThisWeek .. ")|r")
+      for _, p in ipairs(testInterests) do
+        session.interests[p.name] = {
+          category = p.cat, equippedIlvl = 626, tierCount = p.tier, class = p.class,
+        }
       end
-      NLC.Council._testSession = nil
+      session.ranked = NLC.Council.BuildRanking(session)
+      table.insert(fakeSessions, session)
     end
 
-    local ranked = NLC.Council.BuildRanking(fakeSession)
-    NLC.UI.ShowRanking(fakeSession, ranked)
-    NLC.Utils.Print("Test council vist. Klikk 'Tildel', deretter /nordlc test igjen for a se oppdaterte scores.")
+    NLC.UI.ShowWizard(fakeSessions, 1)
+    NLC.Utils.Print("Test wizard vist med " .. #fakeSessions .. " items. Klikk Tildel for a teste auto-advance.")
 
   elseif cmd == "testpopup" then
-    NLC.UI.ShowInterestPopup(
-      "|cffa335ee|Hitem:123456::::::::80:::::|h[Test Chestplate]|h|r",
-      639, "INVTYPE_CHEST", 30
-    )
-    NLC.Utils.Print("Test interest popup vist.")
+    local fakeItems = {
+      { itemLink = "|cffa335ee|Hitem:111111::::::::80:::::|h[Void-Touched Chestplate]|h|r", itemId = 111111, ilvl = 639, equipLoc = "INVTYPE_CHEST", boss = "Test Boss" },
+      { itemLink = "|cffa335ee|Hitem:222222::::::::80:::::|h[Dreamrift Shoulders]|h|r", itemId = 222222, ilvl = 639, equipLoc = "INVTYPE_SHOULDER", boss = "Test Boss" },
+    }
+    NLC.UI.ShowMultiItemPopup(fakeItems, 30)
+    NLC.Utils.Print("Test multi-item popup vist.")
 
   elseif cmd == "testloot" then
     NLC.isOfficer = true
@@ -383,7 +373,7 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.Utils.Print("  /nordlc resume <nr> — Gjenoppta ventende item")
     NLC.Utils.Print("  /nordlc import — Last inn import-data")
     NLC.Utils.Print("  /nordlc reset — Nullstill instance-valg")
-    NLC.Utils.Print("  /nordlc test — Test council med mock-data")
+    NLC.Utils.Print("  /nordlc test — Test wizard med mock-data")
     NLC.Utils.Print("  /nordlc testend — Avslutt test-modus")
     NLC.Utils.Print("  /nordlc status — Vis status")
   end
