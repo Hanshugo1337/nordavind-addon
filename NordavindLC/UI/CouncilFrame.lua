@@ -1,187 +1,207 @@
 -- UI/CouncilFrame.lua
--- Interest popup (all raiders) + loot detected panel (officer)
+-- Multi-item interest popup (all raiders) + loot detected panel (officer)
 
 local NLC = NordavindLC_NS
 local T = NLC.Theme
 
-local interestFrame = nil
+-- ============================================================
+-- MULTI-ITEM INTEREST POPUP
+-- ============================================================
+local multiFrame = nil
+local itemRows = {}
+local ITEM_ROW_HEIGHT = 100
+local ITEM_ROW_WIDTH = 460
 
-function NLC.UI.ShowInterestPopup(itemLink, ilvl, equipLoc, timer)
-  if not interestFrame then
-    interestFrame = CreateFrame("Frame", "NordavindLCInterest", UIParent, "BackdropTemplate")
-    interestFrame:SetSize(440, 380)
-    interestFrame:SetPoint("CENTER", 0, 100)
-    interestFrame:SetMovable(true)
-    interestFrame:EnableMouse(true)
-    interestFrame:RegisterForDrag("LeftButton")
-    interestFrame:SetScript("OnDragStart", interestFrame.StartMoving)
-    interestFrame:SetScript("OnDragStop", interestFrame.StopMovingOrSizing)
-    interestFrame:SetFrameStrata("DIALOG")
-    T.ApplyBackdrop(interestFrame)
+local function createItemRow(parent, index, item)
+  local yOffset = -(index - 1) * ITEM_ROW_HEIGHT
 
-    T.CreateTitleBar(interestFrame, "Loot Council")
+  local row = CreateFrame("Frame", nil, parent)
+  row:SetSize(ITEM_ROW_WIDTH, ITEM_ROW_HEIGHT)
+  row:SetPoint("TOPLEFT", 0, yOffset)
 
-    -- Close button
-    local closeX = CreateFrame("Button", nil, interestFrame, "UIPanelCloseButton")
-    closeX:SetPoint("TOPRIGHT", -2, -2)
+  local bg = row:CreateTexture(nil, "BACKGROUND")
+  bg:SetAllPoints()
+  bg:SetColorTexture(1, 1, 1, index % 2 == 0 and 0.04 or 0)
 
-    -- Item name (large, centered)
-    interestFrame.itemText = interestFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    interestFrame.itemText:SetPoint("TOP", 0, -48)
-    interestFrame.itemText:SetWidth(400)
-    interestFrame.itemText:SetJustifyH("CENTER")
+  local itemText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  itemText:SetPoint("TOPLEFT", 12, -8)
+  itemText:SetWidth(ITEM_ROW_WIDTH - 24)
+  itemText:SetJustifyH("LEFT")
+  itemText:SetText((item.itemLink or "?") .. "  " .. T.MUTED .. "ilvl " .. (item.ilvl or 0) .. "|r")
 
-    -- Equipped comparison
-    interestFrame.equippedText = interestFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    interestFrame.equippedText:SetPoint("TOP", 0, -76)
-    interestFrame.equippedText:SetWidth(400)
-    interestFrame.equippedText:SetJustifyH("CENTER")
-
-    -- Separator
-    T.CreateSeparator(interestFrame, -100)
-
-    -- Timer (centered, with more space)
-    interestFrame.timerText = interestFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    interestFrame.timerText:SetPoint("TOP", 0, -112)
-
-    -- Note input (hidden by default)
-    interestFrame.noteBox = CreateFrame("EditBox", nil, interestFrame, "InputBoxTemplate")
-    interestFrame.noteBox:SetSize(380, 32)
-    interestFrame.noteBox:SetPoint("TOP", 0, -155)
-    interestFrame.noteBox:SetAutoFocus(false)
-    interestFrame.noteBox:SetMaxLetters(60)
-    interestFrame.noteBox:Hide()
-
-    interestFrame.noteLabel = interestFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    interestFrame.noteLabel:SetPoint("BOTTOM", interestFrame.noteBox, "TOP", 0, 6)
-    interestFrame.noteLabel:SetText(T.MUTED .. "Note (valgfritt):|r")
-    interestFrame.noteLabel:Hide()
-
-    interestFrame.noteSendBtn = CreateFrame("Button", nil, interestFrame, "UIPanelButtonTemplate")
-    interestFrame.noteSendBtn:SetSize(380, 40)
-    interestFrame.noteSendBtn:SetPoint("TOP", interestFrame.noteBox, "BOTTOM", 0, -12)
-    interestFrame.noteSendBtn:SetText(T.GREEN .. "Send Upgrade|r")
-    interestFrame.noteSendBtn:SetNormalFontObject("GameFontHighlightLarge")
-    interestFrame.noteSendBtn:Hide()
-    interestFrame.noteSendBtn:SetScript("OnClick", function()
-      local session = NLC.Council.GetActiveSession()
-      local itemId = session and session.itemId or 0
-      local note = interestFrame.noteBox:GetText():trim()
-      NLC.Council.SendInterest(itemId, "upgrade", note ~= "" and note or nil)
-      interestFrame:Hide()
-      NLC.Utils.Print("Interesse: Upgrade" .. (note ~= "" and (" — " .. note) or ""))
-    end)
-
-    interestFrame.noteBox:SetScript("OnEnterPressed", function()
-      interestFrame.noteSendBtn:GetScript("OnClick")()
-    end)
-
-    -- Category buttons
-    interestFrame.buttons = {}
-
-    -- Upgrade (full width, prominent, gold styled)
-    local upgradeBtn = CreateFrame("Button", nil, interestFrame, "UIPanelButtonTemplate")
-    upgradeBtn:SetSize(390, 46)
-    upgradeBtn:SetPoint("TOP", 0, -142)
-    upgradeBtn:SetText(T.GOLD_LIGHT .. "Upgrade|r")
-    upgradeBtn:SetNormalFontObject("GameFontHighlightLarge")
-    upgradeBtn:SetScript("OnClick", function()
-      upgradeBtn:Hide()
-      interestFrame.buttons["catalyst"]:Hide()
-      interestFrame.buttons["offspec"]:Hide()
-      interestFrame.buttons["tmog"]:Hide()
-      interestFrame.passBtn:Hide()
-      interestFrame.noteLabel:Show()
-      interestFrame.noteBox:Show()
-      interestFrame.noteBox:SetText("")
-      interestFrame.noteBox:SetFocus()
-      interestFrame.noteSendBtn:Show()
-    end)
-    interestFrame.buttons["upgrade"] = upgradeBtn
-
-    -- Second row: Catalyst, Offspec, Tmog — evenly spaced
-    local secondRow = {
-      { id = "catalyst", label = "|cff9933ffCatalyst|r" },
-      { id = "offspec",  label = "|cff3399ffOffspec|r" },
-      { id = "tmog",     label = T.GOLD .. "Tmog|r" },
-    }
-    local btnWidth = 122
-    local btnSpacing = 6
-    local totalWidth = btnWidth * 3 + btnSpacing * 2
-    local startX = -totalWidth / 2 + btnWidth / 2
-
-    for i, cat in ipairs(secondRow) do
-      local btn = CreateFrame("Button", nil, interestFrame, "UIPanelButtonTemplate")
-      btn:SetSize(btnWidth, 40)
-      btn:SetPoint("TOP", startX + (i - 1) * (btnWidth + btnSpacing), -198)
-      btn:SetText(cat.label)
-      btn:SetScript("OnClick", function()
-        local session = NLC.Council.GetActiveSession()
-        local itemId = session and session.itemId or 0
-        NLC.Council.SendInterest(itemId, cat.id)
-        interestFrame:Hide()
-        NLC.Utils.Print("Interesse: " .. cat.id)
-      end)
-      interestFrame.buttons[cat.id] = btn
-    end
-
-    -- Separator before pass
-    T.CreateSeparator(interestFrame, -252)
-
-    -- Pass (full width, bottom, subtle)
-    local passBtn = CreateFrame("Button", nil, interestFrame, "UIPanelButtonTemplate")
-    passBtn:SetSize(390, 40)
-    passBtn:SetPoint("TOP", 0, -264)
-    passBtn:SetText(T.MUTED .. "Pass|r")
-    passBtn:SetScript("OnClick", function()
-      interestFrame:Hide()
-    end)
-    interestFrame.passBtn = passBtn
-  end
-
-  interestFrame.title:SetText(T.GOLD .. "Loot Council|r")
-  interestFrame.itemText:SetText((itemLink or "?") .. "  " .. T.MUTED .. "(ilvl " .. (ilvl or 0) .. ")|r")
-
-  local eqLink, eqIlvl = NLC.Utils.GetEquippedInfo(equipLoc or "")
+  local eqLink, eqIlvl = NLC.Utils.GetEquippedInfo(item.equipLoc or "")
+  local eqText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  eqText:SetPoint("TOPLEFT", 12, -26)
+  eqText:SetWidth(ITEM_ROW_WIDTH - 24)
+  eqText:SetJustifyH("LEFT")
   if eqLink then
-    local diff = (ilvl or 0) - eqIlvl
+    local diff = (item.ilvl or 0) - eqIlvl
     local diffColor = diff > 0 and T.GREEN or T.RED
-    interestFrame.equippedText:SetText(T.MUTED .. "Equipped: |r" .. eqLink .. "  " .. T.MUTED .. "(" .. eqIlvl .. ")|r  " .. diffColor .. (diff > 0 and "+" or "") .. diff .. " ilvl|r")
+    eqText:SetText(T.MUTED .. "Equipped: |r" .. eqLink .. " " .. T.MUTED .. "(" .. eqIlvl .. ")|r  " .. diffColor .. (diff > 0 and "+" or "") .. diff .. "|r")
   else
-    interestFrame.equippedText:SetText(T.MUTED .. "Ingen item i slot|r")
+    eqText:SetText(T.MUTED .. "Ingen item i slot|r")
   end
 
-  -- Reset to button view
-  interestFrame.noteLabel:Hide()
-  interestFrame.noteBox:Hide()
-  interestFrame.noteBox:SetText("")
-  interestFrame.noteSendBtn:Hide()
-  interestFrame.buttons["upgrade"]:Show()
-  interestFrame.buttons["catalyst"]:Show()
-  interestFrame.buttons["offspec"]:Show()
-  interestFrame.buttons["tmog"]:Show()
-  interestFrame.passBtn:Show()
+  local categories = {
+    { id = "upgrade",  label = T.GOLD_LIGHT .. "Upgrade|r", width = 110 },
+    { id = "catalyst", label = "|cff9933ffCatalyst|r",      width = 95 },
+    { id = "offspec",  label = "|cff3399ffOffspec|r",       width = 95 },
+    { id = "tmog",     label = T.GOLD .. "Tmog|r",          width = 80 },
+  }
 
-  interestFrame.timerText:SetText(T.GOLD .. (timer or 180) .. "s|r " .. T.MUTED .. "igjen|r")
-  interestFrame:Show()
+  local rowData = { buttons = {}, noteBox = nil, selection = nil, noteText = "" }
+  local btnX = 12
 
-  local remaining = timer or 180
-  C_Timer.NewTicker(1, function(ticker)
-    remaining = remaining - 1
-    if remaining <= 0 or not interestFrame:IsShown() then
-      ticker:Cancel()
-      if interestFrame:IsShown() then interestFrame:Hide() end
-      return
-    end
-    if interestFrame.timerText then
-      local color = remaining <= 5 and T.RED or remaining <= 10 and T.ORANGE or T.GOLD
-      interestFrame.timerText:SetText(color .. remaining .. "s|r " .. T.MUTED .. "igjen|r")
-    end
-  end, timer or 180)
+  for _, cat in ipairs(categories) do
+    local btn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    btn:SetSize(cat.width, 28)
+    btn:SetPoint("TOPLEFT", btnX, -46)
+    btn:SetText(cat.label)
+
+    btn:SetScript("OnClick", function()
+      if rowData.selection == cat.id then
+        rowData.selection = nil
+        for _, b in pairs(rowData.buttons) do b:SetAlpha(1.0) end
+        if cat.id == "upgrade" and rowData.noteBox then
+          rowData.noteBox:Hide()
+        end
+      else
+        rowData.selection = cat.id
+        for id, b in pairs(rowData.buttons) do
+          b:SetAlpha(id == cat.id and 1.0 or 0.4)
+        end
+        if cat.id == "upgrade" and rowData.noteBox then
+          rowData.noteBox:Show()
+          rowData.noteBox:SetFocus()
+        elseif rowData.noteBox then
+          rowData.noteBox:Hide()
+        end
+      end
+    end)
+
+    rowData.buttons[cat.id] = btn
+    btnX = btnX + cat.width + 6
+  end
+
+  local noteBox = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
+  noteBox:SetSize(ITEM_ROW_WIDTH - 24, 22)
+  noteBox:SetPoint("TOPLEFT", 12, -78)
+  noteBox:SetAutoFocus(false)
+  noteBox:SetMaxLetters(60)
+  noteBox:Hide()
+  noteBox:SetScript("OnTextChanged", function(self)
+    rowData.noteText = self:GetText():trim()
+  end)
+  noteBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+  rowData.noteBox = noteBox
+
+  itemRows[item.itemId] = rowData
+  return row
 end
 
--- Loot Detected Panel (officer only)
+function NLC.UI.ShowMultiItemPopup(sessions, timer)
+  itemRows = {}
+
+  if multiFrame then multiFrame:Hide() end
+
+  local itemCount = #sessions
+  local contentHeight = itemCount * ITEM_ROW_HEIGHT
+  local frameHeight = math.min(120 + contentHeight, 600)
+
+  if not multiFrame then
+    multiFrame = CreateFrame("Frame", "NordavindLCMultiItem", UIParent, "BackdropTemplate")
+    multiFrame:SetPoint("CENTER", 0, 50)
+    multiFrame:SetMovable(true)
+    multiFrame:EnableMouse(true)
+    multiFrame:RegisterForDrag("LeftButton")
+    multiFrame:SetScript("OnDragStart", multiFrame.StartMoving)
+    multiFrame:SetScript("OnDragStop", multiFrame.StopMovingOrSizing)
+    multiFrame:SetFrameStrata("DIALOG")
+    T.ApplyBackdrop(multiFrame)
+
+    local closeX = CreateFrame("Button", nil, multiFrame, "UIPanelCloseButton")
+    closeX:SetPoint("TOPRIGHT", -2, -2)
+  end
+
+  multiFrame:SetSize(ITEM_ROW_WIDTH + 40, frameHeight)
+
+  if multiFrame.scrollChild then
+    for _, child in ipairs({ multiFrame.scrollChild:GetChildren() }) do child:Hide() end
+  end
+
+  if multiFrame.title then multiFrame.title:Hide() end
+  T.CreateTitleBar(multiFrame, "Loot Council")
+  local bossName = sessions[1] and sessions[1].boss or "Unknown"
+  multiFrame.title:SetText(T.GOLD .. "Loot Council|r  " .. T.MUTED .. "— " .. bossName .. "|r")
+
+  if not multiFrame.timerText then
+    multiFrame.timerText = multiFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    multiFrame.timerText:SetPoint("TOPRIGHT", -40, -10)
+  end
+  multiFrame.timerText:SetText(T.GOLD .. timer .. "s|r")
+  multiFrame.timerText:Show()
+
+  if not multiFrame.scrollFrame then
+    multiFrame.scrollFrame = CreateFrame("ScrollFrame", nil, multiFrame, "UIPanelScrollFrameTemplate")
+    multiFrame.scrollFrame:SetPoint("TOPLEFT", 12, -40)
+    multiFrame.scrollFrame:SetPoint("BOTTOMRIGHT", -32, 56)
+
+    multiFrame.scrollChild = CreateFrame("Frame")
+    multiFrame.scrollFrame:SetScrollChild(multiFrame.scrollChild)
+  end
+  multiFrame.scrollFrame:SetPoint("BOTTOMRIGHT", -32, 56)
+  multiFrame.scrollChild:SetSize(ITEM_ROW_WIDTH, contentHeight)
+
+  for i, session in ipairs(sessions) do
+    local row = createItemRow(multiFrame.scrollChild, i, session)
+    row:Show()
+  end
+
+  if not multiFrame.sendBtn then
+    multiFrame.sendBtn = CreateFrame("Button", nil, multiFrame, "UIPanelButtonTemplate")
+    multiFrame.sendBtn:SetSize(ITEM_ROW_WIDTH, 40)
+    multiFrame.sendBtn:SetPoint("BOTTOM", 0, 12)
+    multiFrame.sendBtn:SetText(T.GREEN .. "Send Responses|r")
+    multiFrame.sendBtn:SetNormalFontObject("GameFontHighlightLarge")
+  end
+  multiFrame.sendBtn:SetScript("OnClick", function()
+    local selections = {}
+    for _, session in ipairs(sessions) do
+      local rowData = itemRows[session.itemId]
+      if rowData and rowData.selection then
+        selections[session.itemId] = {
+          category = rowData.selection,
+          note = rowData.selection == "upgrade" and rowData.noteText or "",
+        }
+      end
+    end
+    NLC.Council.SubmitResponses(selections)
+    multiFrame:Hide()
+  end)
+  multiFrame.sendBtn:Show()
+
+  multiFrame:Show()
+
+  local remaining = timer
+  if multiFrame._ticker then multiFrame._ticker:Cancel() end
+  multiFrame._ticker = C_Timer.NewTicker(1, function(ticker)
+    remaining = remaining - 1
+    if remaining <= 0 or not multiFrame:IsShown() then
+      ticker:Cancel()
+      if multiFrame:IsShown() then
+        multiFrame.sendBtn:GetScript("OnClick")()
+      end
+      return
+    end
+    local color = remaining <= 10 and T.RED or remaining <= 30 and T.ORANGE or T.GOLD
+    multiFrame.timerText:SetText(color .. remaining .. "s|r")
+  end, timer)
+end
+
+-- ============================================================
+-- LOOT DETECTED PANEL (officer only)
 -- Shows all dropped items with remove buttons, then "Start Council" queues them all
+-- ============================================================
 local lootPanel = nil
 
 local function refreshLootPanel(items)
@@ -285,40 +305,11 @@ function NLC.UI.ShowLootDetected(items)
       local remaining = NLC.LootDetection.GetDroppedItems()
       if #remaining == 0 then return end
 
-      -- Start first item, queue the rest
-      local first = remaining[1]
-      NLC.Council.StartSession(first.itemLink, first.itemId, first.ilvl, first.equipLoc, first.boss)
-
-      -- Queue remaining items as pending sessions
-      for i = 2, #remaining do
-        local item = remaining[i]
-        table.insert(NLC.pendingSessions, {
-          itemLink = item.itemLink,
-          itemId = item.itemId,
-          ilvl = item.ilvl,
-          equipLoc = item.equipLoc,
-          boss = item.boss,
-          timer = NLC.db.config.timer or 30,
-          interests = {},
-          phase = "collecting",
-        })
-      end
-
-      if #remaining > 1 then
-        NLC.Utils.Print((#remaining - 1) .. " item(s) lagt i ko.")
-        NLC.UpdateMinimapCount()
-      end
-
+      NLC.Council.StartMultiSession(remaining, remaining[1].boss)
       lootPanel:Hide()
     end)
   end
 
   refreshLootPanel(items)
   lootPanel:Show()
-end
-
-function NLC.UI.UpdateCouncilInterests(session)
-  local count = 0
-  for _ in pairs(session.interests) do count = count + 1 end
-  NLC.Utils.Print(count .. " interesse(r) mottatt")
 end
