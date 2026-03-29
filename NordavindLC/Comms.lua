@@ -24,13 +24,7 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
   local msgType, data = message:match("^(%w+):(.*)$")
   if not msgType then return end
 
-  if msgType == "COUNCIL_START" then
-    local itemLink, timer = data:match("^(.+):(%d+)$")
-    if itemLink and NLC.Council.OnCouncilStart then
-      NLC.Council.OnCouncilStart(itemLink, tonumber(timer), sender)
-    end
-
-  elseif msgType == "SESSION_START" then
+  if msgType == "SESSION_START" then
     local items = {}
     for itemData in data:gmatch("[^|]+") do
       local itemLink, itemId, ilvl, equipLoc, boss = itemData:match("^(.*);(%d+);(%d+);([^;]*);(.*)$")
