@@ -41,10 +41,21 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
     return
   end
 
+  -- SESSION_START also auto-activates (in case raider missed ACTIVATE or joined late)
+  if not NLC.active and msgType == "SESSION_START" then
+    NLC.Activate()
+    NLC.Utils.Print("Activated by council session.")
+  end
+
   if not NLC.active then return end
 
   if msgType == "SESSION_START" then
-    if NLC.Council.OnMultiSessionStart then
+    -- Skip own broadcast — the officer who started it already has state from StartMultiSession
+    local myName = UnitName("player")
+    local senderName = sender:match("^([^-]+)") or sender
+    if senderName == myName then
+      -- do nothing, already set up
+    elseif NLC.Council.OnMultiSessionStart then
       NLC.Council.OnMultiSessionStart(data.items, data.timer or 90, sender)
     end
 

@@ -38,6 +38,8 @@ function NLC.Council.StartMultiSession(items, boss)
     })
   end
 
+  -- Ensure all raiders are activated before sending session
+  NLC.Comms.Send("ACTIVATE", "")
   NLC.Comms.SendMultiSession(items, boss or items[1].boss or "Unknown")
   NLC.Utils.Print("Council started for " .. #items .. " items")
 
