@@ -2,7 +2,7 @@
 ## Title: NordavindLC
 ## Notes: Nordavind Guild Loot Council
 ## Author: Nordavind
-## Version: 1.2.0
+## Version: 1.3.0
 ## X-Website: https://github.com/Hanshugo1337/nordavind-addon
 ## SavedVariables: NordavindLC_DB, NordavindLC_Import
 
