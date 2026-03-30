@@ -20,10 +20,8 @@ jobs:
 
       - name: Create addon zip
         run: |
-          cd NordavindLC
-          zip -r ../NordavindLC-${{ steps.version.outputs.version }}.zip . \
-            -x ".*"
-          cd ..
+          zip -r NordavindLC-${{ steps.version.outputs.version }}.zip NordavindLC/ \
+            -x "NordavindLC/.*"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
