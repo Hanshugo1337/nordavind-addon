@@ -1,9 +1,0 @@
-ignore:
-  - companion
-  - docs
-  - "*.zip"
-  - .pkgmeta
-  - .gitignore
-  - .github
-
-enable-nolib-creation: no
