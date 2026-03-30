@@ -2,6 +2,13 @@ package-as: NordavindLC
 
 ignore:
   - companion
+  - docs
   - "*.zip"
   - .pkgmeta
   - .gitignore
+  - .github
+
+enable-nolib-creation: no
+
+move-folders:
+  NordavindLC: NordavindLC
