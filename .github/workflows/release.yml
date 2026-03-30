@@ -11,10 +11,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Package and release
-        uses: BigWigsMods/packager@v2
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Create addon zip
+        run: |
+          cd NordavindLC
+          zip -r ../NordavindLC-${{ steps.version.outputs.version }}.zip . \
+            -x ".*"
+          cd ..
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          args: -g retail
+          files: NordavindLC-${{ steps.version.outputs.version }}.zip
+          generate_release_notes: true
+
+      - name: Upload to CurseForge
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
-          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Build metadata JSON
+          cat > metadata.json << 'META'
+          {
+            "changelog": "See https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}",
+            "changelogType": "text",
+            "displayName": "NordavindLC ${{ steps.version.outputs.version }}",
+            "gameVersions": [11857],
+            "releaseType": "release"
+          }
+          META
+
+          curl -s -X POST \
+            "https://wow.curseforge.com/api/projects/1499638/upload-file" \
+            -H "X-Api-Token: $CF_API_KEY" \
+            -F "metadata=<metadata.json;type=application/json" \
+            -F "file=@NordavindLC-${{ steps.version.outputs.version }}.zip"
