@@ -4,6 +4,7 @@
 ## Author: Nordavind
 ## Version: 1.3.0
 ## X-Website: https://github.com/Hanshugo1337/nordavind-addon
+## X-Curse-Project-ID: 1499638
 ## SavedVariables: NordavindLC_DB, NordavindLC_Import
 
 Libs\LibStub\LibStub.lua
