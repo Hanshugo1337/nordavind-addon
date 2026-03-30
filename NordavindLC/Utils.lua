@@ -46,28 +46,143 @@ NLC.Utils.SLOT_MAP = {
 function NLC.Utils.GetEquippedInfo(equipLoc)
   local slotId = NLC.Utils.SLOT_MAP[equipLoc]
   if not slotId then return nil, 0 end
+
+  -- Rings and trinkets have two slots — return the lower ilvl one
+  local altSlot = nil
+  if equipLoc == "INVTYPE_FINGER" then altSlot = 12
+  elseif equipLoc == "INVTYPE_TRINKET" then altSlot = 14
+  end
+
   local link = GetInventoryItemLink("player", slotId)
+  local ilvl = link and (GetDetailedItemLevelInfo(link) or 0) or 0
+
+  if altSlot then
+    local link2 = GetInventoryItemLink("player", altSlot)
+    local ilvl2 = link2 and (GetDetailedItemLevelInfo(link2) or 0) or 0
+    -- Only compare if both slots are occupied
+    if link2 and link then
+      if ilvl2 < ilvl then return link2, ilvl2 end
+    elseif link2 and not link then
+      return link2, ilvl2
+    end
+  end
+
   if not link then return nil, 0 end
-  local ilvl = GetDetailedItemLevelInfo(link) or 0
   return link, ilvl
 end
 
 function NLC.Utils.GetTierCount()
   local tierSlots = { 1, 3, 5, 10, 7 } -- head, shoulder, chest, hands, legs
   local count = 0
+  if not NLC.Utils._scanTip then
+    NLC.Utils._scanTip = CreateFrame("GameTooltip", "NordavindLCScanTip", nil, "GameTooltipTemplate")
+    NLC.Utils._scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
+  end
+  local tip = NLC.Utils._scanTip
   for _, slot in ipairs(tierSlots) do
     local link = GetInventoryItemLink("player", slot)
     if link then
-      local itemId = C_Item.GetItemInfoInstant(link)
-      if itemId then
-        local setInfo = C_Item.GetItemSetInfo(itemId)
-        if setInfo then
-          count = count + 1
+      tip:ClearLines()
+      tip:SetInventoryItem("player", slot)
+      for i = 1, tip:NumLines() do
+        local textObj = _G["NordavindLCScanTipTextLeft" .. i]
+        if textObj then
+          local line = textObj:GetText() or ""
+          if line:find("%(%d/%d%)") or line:find("Set:") then
+            count = count + 1
+            break
+          end
         end
       end
     end
   end
   return count
+end
+
+function NLC.Utils.IsWarbound(itemLink)
+  if not itemLink then return false end
+  if not NLC.Utils._scanTip then
+    NLC.Utils._scanTip = CreateFrame("GameTooltip", "NordavindLCScanTip", nil, "GameTooltipTemplate")
+    NLC.Utils._scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
+  end
+  local tip = NLC.Utils._scanTip
+  tip:ClearLines()
+  tip:SetHyperlink(itemLink)
+  for i = 1, tip:NumLines() do
+    local textObj = _G["NordavindLCScanTipTextLeft" .. i]
+    if textObj then
+      local line = textObj:GetText() or ""
+      if line:find("Warbound") or line:find("Account Bound") then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+-- Armor type per class (for filtering council buttons)
+NLC.Utils.CLASS_ARMOR = {
+  WARRIOR = "Plate", PALADIN = "Plate", DEATHKNIGHT = "Plate",
+  HUNTER = "Mail", SHAMAN = "Mail", EVOKER = "Mail",
+  ROGUE = "Leather", MONK = "Leather", DRUID = "Leather", DEMONHUNTER = "Leather",
+  MAGE = "Cloth", WARLOCK = "Cloth", PRIEST = "Cloth",
+}
+
+local ARMOR_SUBCLASS = { [1] = "Cloth", [2] = "Leather", [3] = "Mail", [4] = "Plate" }
+local TIER_SLOTS = { INVTYPE_HEAD = true, INVTYPE_SHOULDER = true, INVTYPE_CHEST = true, INVTYPE_ROBE = true, INVTYPE_HAND = true, INVTYPE_LEGS = true }
+local JEWELRY_SLOTS = { INVTYPE_FINGER = true, INVTYPE_TRINKET = true, INVTYPE_NECK = true, INVTYPE_CLOAK = true }
+local WEAPON_SLOTS = { INVTYPE_WEAPON = true, INVTYPE_2HWEAPON = true, INVTYPE_WEAPONMAINHAND = true, INVTYPE_WEAPONOFFHAND = true, INVTYPE_HOLDABLE = true, INVTYPE_SHIELD = true, INVTYPE_RANGED = true }
+
+function NLC.Utils.GetAvailableCategories(itemLink, equipLoc)
+  local result = { upgrade = false, catalyst = false, offspec = false, tmog = false }
+  if not itemLink then return result end
+
+  -- Recipes or items without equipLoc — show upgrade only
+  if not equipLoc or equipLoc == "" then
+    result.upgrade = true
+    return result
+  end
+
+  local _, playerClass = UnitClass("player")
+  local myArmor = NLC.Utils.CLASS_ARMOR[playerClass]
+
+  -- Jewelry/cloaks — universal, everyone can use
+  if JEWELRY_SLOTS[equipLoc] then
+    result.upgrade = true
+    result.offspec = true
+    result.tmog = true
+    return result
+  end
+
+  -- Weapons — check if player can equip this weapon type
+  if WEAPON_SLOTS[equipLoc] then
+    if IsEquippableItem(itemLink) then
+      result.upgrade = true
+      result.offspec = true
+      result.tmog = true
+    end
+    return result
+  end
+
+  -- Armor — check armor type via GetItemInfoInstant (synchronous)
+  local _, _, _, _, _, classID, subclassID = C_Item.GetItemInfoInstant(itemLink)
+  if classID == 4 then -- Armor
+    local armorType = ARMOR_SUBCLASS[subclassID]
+    if armorType and armorType == myArmor then
+      -- Primary armor type — full options
+      result.upgrade = true
+      result.offspec = true
+      result.tmog = true
+      if TIER_SLOTS[equipLoc] then
+        result.catalyst = true
+      end
+    elseif IsEquippableItem(itemLink) then
+      -- Can equip but not primary type (e.g. plate user + cloth) — tmog only
+      result.tmog = true
+    end
+  end
+
+  return result
 end
 
 function NLC.Utils.TableCount(t)

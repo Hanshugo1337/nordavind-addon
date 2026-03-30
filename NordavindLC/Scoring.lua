@@ -47,20 +47,20 @@ end
 function NLC.Scoring.GetWarnings(imported)
   local warnings = {}
   if not imported then
-    table.insert(warnings, "Ingen web-data")
+    table.insert(warnings, "No web data")
     return warnings
   end
   if imported.attendance and imported.attendance < 80 then
-    table.insert(warnings, string.format("Lavt oppmote: %d%%", imported.attendance))
+    table.insert(warnings, string.format("Low attendance: %d%%", imported.attendance))
   end
   if imported.wclParse and imported.wclParse < 25 then
-    table.insert(warnings, string.format("Lav parse: %d", imported.wclParse))
+    table.insert(warnings, string.format("Low parse: %d", imported.wclParse))
   end
   if imported.defensives and imported.defensives < 0.8 then
-    table.insert(warnings, string.format("Lave defensives: %.1f/kamp", imported.defensives))
+    table.insert(warnings, string.format("Low defensives: %.1f/fight", imported.defensives))
   end
   if imported.lootThisWeek and imported.lootThisWeek > 0 then
-    table.insert(warnings, string.format("%d loot denne uken", imported.lootThisWeek))
+    table.insert(warnings, string.format("%d loot this week", imported.lootThisWeek))
   end
   if imported.rank == "trial" then
     table.insert(warnings, "Trial")

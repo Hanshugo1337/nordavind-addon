@@ -26,14 +26,14 @@ function NLC.UI.ShowActivationPrompt(instanceKey)
 
     local text = promptFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     text:SetPoint("TOP", 0, -55)
-    text:SetText(T.MUTED .. "Vil du bruke NordavindLC\nfor loot council?|r")
+    text:SetText(T.MUTED .. "Enable NordavindLC\nfor loot council?|r")
     text:SetJustifyH("CENTER")
     text:SetSpacing(6)
 
     local jaBtn = CreateFrame("Button", nil, promptFrame, "UIPanelButtonTemplate")
     jaBtn:SetSize(140, 34)
     jaBtn:SetPoint("BOTTOMLEFT", 35, 25)
-    jaBtn:SetText("Ja")
+    jaBtn:SetText("Yes")
     jaBtn:SetScript("OnClick", function()
       if promptFrame.instanceKey then
         NLC.db.instanceChoices = NLC.db.instanceChoices or {}
@@ -47,14 +47,14 @@ function NLC.UI.ShowActivationPrompt(instanceKey)
     local neiBtn = CreateFrame("Button", nil, promptFrame, "UIPanelButtonTemplate")
     neiBtn:SetSize(140, 34)
     neiBtn:SetPoint("BOTTOMRIGHT", -35, 25)
-    neiBtn:SetText("Nei")
+    neiBtn:SetText("No")
     neiBtn:SetScript("OnClick", function()
       if promptFrame.instanceKey then
         NLC.db.instanceChoices = NLC.db.instanceChoices or {}
         NLC.db.instanceChoices[promptFrame.instanceKey] = "no"
       end
       promptFrame:Hide()
-      NLC.Utils.Print("Deaktivert for denne instansen. Bruk /nordlc activate for a aktivere.")
+      NLC.Utils.Print("Disabled for this instance. Use /nordlc activate to enable.")
     end)
 
     local closeBtn = CreateFrame("Button", nil, promptFrame, "UIPanelCloseButton")

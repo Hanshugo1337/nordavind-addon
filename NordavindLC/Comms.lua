@@ -1,34 +1,42 @@
 -- Comms.lua
--- Addon message communication for raid-wide council sync
+-- Addon communication using AceComm (auto-chunking for >255 byte messages)
+-- and AceSerializer (safe serialization, no separator collisions with item links)
 
 local NLC = NordavindLC_NS
 
 local PREFIX = "NordLC"
 local registered = false
 
+local AceComm = LibStub("AceComm-3.0")
+local AceSerializer = LibStub("AceSerializer-3.0")
+AceComm:Embed(NLC.Comms)
+AceSerializer:Embed(NLC.Comms)
+
 function NLC.Comms.Register()
   if registered then return end
-  C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
+  NLC.Comms:RegisterComm(PREFIX, function(prefix, message, channel, sender)
+    NLC.Comms.OnMessage(prefix, message, channel, sender)
+  end)
   registered = true
 end
 
 function NLC.Comms.Send(msgType, data)
   if not IsInRaid() then return end
-  local payload = msgType .. ":" .. (data or "")
-  C_ChatInfo.SendAddonMessage(PREFIX, payload, "RAID")
+  local payload = NLC.Comms:Serialize(msgType, data)
+  NLC.Comms:SendCommMessage(PREFIX, payload, "RAID")
 end
 
 function NLC.Comms.OnMessage(prefix, message, channel, sender)
   if prefix ~= PREFIX then return end
 
-  local msgType, data = message:match("^(%w+):(.*)$")
-  if not msgType then return end
+  local success, msgType, data = NLC.Comms:Deserialize(message)
+  if not success then return end
 
   -- ACTIVATE is handled before active check (activates non-leader raiders)
   if msgType == "ACTIVATE" then
     if not NLC.active then
       NLC.Activate()
-      NLC.Utils.Print("Aktivert av raid leader.")
+      NLC.Utils.Print("Activated by raid leader.")
     end
     return
   end
@@ -36,22 +44,8 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
   if not NLC.active then return end
 
   if msgType == "SESSION_START" then
-    local items = {}
-    for itemData in data:gmatch("[^|]+") do
-      local itemLink, itemId, ilvl, equipLoc, boss = itemData:match("^(.*);(%d+);(%d+);([^;]*);(.*)$")
-      if itemLink then
-        table.insert(items, {
-          itemLink = itemLink,
-          itemId = tonumber(itemId),
-          ilvl = tonumber(ilvl),
-          equipLoc = equipLoc,
-          boss = boss,
-        })
-      end
-    end
-    local timer = 90
     if NLC.Council.OnMultiSessionStart then
-      NLC.Council.OnMultiSessionStart(items, timer, sender)
+      NLC.Council.OnMultiSessionStart(data.items, data.timer or 90, sender)
     end
 
   elseif msgType == "RESPOND" then
@@ -60,54 +54,57 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
     end
 
   elseif msgType == "INTEREST" then
-    for entry in data:gmatch("[^,]+") do
-      local itemId, category, eqIlvl, tierCount, note = entry:match("^(%d+):(%w+):(%d+):(%d+):?(.*)$")
-      if itemId and NLC.Council.OnInterestReceived then
-        NLC.Council.OnInterestReceived(sender, tonumber(itemId), category, tonumber(eqIlvl), tonumber(tierCount), note)
+    for _, entry in ipairs(data) do
+      if NLC.Council.OnInterestReceived then
+        NLC.Council.OnInterestReceived(sender, entry.sessionIdx, entry.category, entry.eqIlvl, entry.tierCount, entry.note)
       end
     end
 
   elseif msgType == "AWARD" then
-    local itemLink, playerName = data:match("^(.+):([^:]+)$")
-    if itemLink and NLC.Council.OnAward then
-      NLC.Council.OnAward(itemLink, playerName, sender)
+    if NLC.Council.OnAward then
+      NLC.Council.OnAward(data.sessionIdx, data.itemLink, data.playerName, sender)
     end
 
-  elseif msgType == "COUNCIL_CLOSE" then
-    if NLC.Council.OnCouncilClose then
-      NLC.Council.OnCouncilClose(data)
+  elseif msgType == "SESSION_CLOSE" then
+    NLC.UI.HideMultiItemPopup()
+    if not NLC.isOfficer and NLC.Council.OnSessionClose then
+      NLC.Council.OnSessionClose(data)
+    end
+
+  elseif msgType == "ROLL_CALL" then
+    NLC.Comms.Send("ROLL_CALL_ACK", "")
+
+  elseif msgType == "ROLL_CALL_ACK" then
+    if NLC.Council.OnRollCallAck then
+      NLC.Council.OnRollCallAck(sender)
     end
   end
 end
 
 function NLC.Comms.SendMultiSession(items, boss)
   if not IsInRaid() then return end
-  local parts = {}
-  for _, item in ipairs(items) do
-    table.insert(parts, string.format("%s;%d;%d;%s;%s",
-      item.itemLink, item.itemId or 0, item.ilvl or 0, item.equipLoc or "", boss or ""))
+  local data = { items = {}, timer = NLC.db.config.timer or 90 }
+  for idx, item in ipairs(items) do
+    table.insert(data.items, {
+      sessionIdx = idx,
+      itemLink = item.itemLink,
+      itemId = item.itemId or 0,
+      ilvl = item.ilvl or 0,
+      equipLoc = item.equipLoc or "",
+      boss = boss or "",
+    })
   end
-  local payload = "SESSION_START:" .. table.concat(parts, "|")
-  C_ChatInfo.SendAddonMessage(PREFIX, payload, "RAID")
+  NLC.Comms.Send("SESSION_START", data)
 end
 
 function NLC.Comms.SendMultiInterest(responses)
-  local parts = {}
-  for _, r in ipairs(responses) do
-    table.insert(parts, string.format("%d:%s:%d:%d:%s",
-      r.itemId or 0, r.category, r.eqIlvl or 0, r.tierCount or 0, r.note or ""))
-  end
-  NLC.Comms.Send("INTEREST", table.concat(parts, ","))
+  NLC.Comms.Send("INTEREST", responses)
 end
 
 function NLC.Comms.SendRespond()
   NLC.Comms.Send("RESPOND", "1")
 end
 
-local commFrame = CreateFrame("Frame")
-commFrame:RegisterEvent("CHAT_MSG_ADDON")
-commFrame:SetScript("OnEvent", function(self, event, prefix, message, channel, sender)
-  if event == "CHAT_MSG_ADDON" then
-    NLC.Comms.OnMessage(prefix, message, channel, sender)
-  end
-end)
+function NLC.Comms.SendRollCall()
+  NLC.Comms.Send("ROLL_CALL", "")
+end

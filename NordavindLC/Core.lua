@@ -30,12 +30,12 @@ frame:SetScript("OnEvent", function(self, event, arg1)
 
     if NordavindLC_Import and NordavindLC_Import.players then
       NLC.db.importData = NordavindLC_Import
-      NLC.Utils.Print("Import-data lastet (" .. NLC.Utils.TableCount(NLC.db.importData.players) .. " spillere)")
+      NLC.Utils.Print("Import data loaded (" .. NLC.Utils.TableCount(NLC.db.importData.players) .. " players)")
     end
 
     -- Always register comms so we can receive ACTIVATE from leader
     NLC.Comms.Register()
-    NLC.Utils.Print("Lastet. Bruk /nordlc for kommandoer.")
+    NLC.Utils.Print("Loaded. Use /nordlc for commands.")
 
   elseif event == "PLAYER_ENTERING_WORLD" or event == "PARTY_LEADER_CHANGED" then
     if IsInRaid() and not NLC.active then
@@ -160,17 +160,17 @@ function NLC.CreateMinimapButton()
   minimapBtn:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     GameTooltip:AddLine("NordavindLC", 0, 0.8, 1)
-    GameTooltip:AddLine(NLC.active and "|cff00ff00Aktiv|r" or "|cffff0000Inaktiv|r", 1, 1, 1)
+    GameTooltip:AddLine(NLC.active and "|cff00ff00Active|r" or "|cffff0000Inactive|r", 1, 1, 1)
     if NLC.isOfficer then
-      GameTooltip:AddLine("Officer-modus", 0.5, 1, 0.5)
+      GameTooltip:AddLine("Officer mode", 0.5, 1, 0.5)
     end
     local pending = #NLC.pendingSessions
     if pending > 0 then
-      GameTooltip:AddLine(pending .. " ventende items", 1, 0.8, 0)
+      GameTooltip:AddLine(pending .. " pending items", 1, 0.8, 0)
     end
     GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("Venstreklikk: Status / Pending", 0.6, 0.6, 0.6)
-    GameTooltip:AddLine("Hoyreklikk: Deaktiver", 0.6, 0.6, 0.6)
+    GameTooltip:AddLine("Left-click: Status / Pending", 0.6, 0.6, 0.6)
+    GameTooltip:AddLine("Right-click: Deactivate", 0.6, 0.6, 0.6)
     GameTooltip:Show()
   end)
   minimapBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -194,14 +194,14 @@ function NLC.Activate()
   NLC.Comms.Register()
   NLC.LootDetection.Register()
   NLC.CreateMinimapButton()
-  NLC.Utils.Print("Aktivert! " .. (NLC.isOfficer and "(Officer-modus)" or "(Raider-modus)"))
+  NLC.Utils.Print("Activated! " .. (NLC.isOfficer and "(Officer mode)" or "(Raider mode)"))
 end
 
 function NLC.Deactivate()
   NLC.active = false
   NLC.LootDetection.Unregister()
   if minimapBtn then minimapBtn:Hide() end
-  NLC.Utils.Print("Deaktivert.")
+  NLC.Utils.Print("Deactivated.")
 end
 
 function NLC.RecordAward(item, awardedTo, awardedBy, boss)
@@ -226,17 +226,17 @@ SlashCmdList["NORDLC"] = function(msg)
   if cmd == "add" then
     -- Manual council: /nordlc add [item-link]
     if not NLC.active then
-      NLC.Utils.Print("Addon er ikke aktivert. Bruk /nordlc activate forst.")
+      NLC.Utils.Print("Addon is not active. Use /nordlc activate first.")
       return
     end
     if not NLC.isOfficer then
-      NLC.Utils.Print("Kun officers kan starte council.")
+      NLC.Utils.Print("Only officers can start council.")
       return
     end
     -- arg contains the item link (preserved case)
     local itemLink = arg:match("|c.-|h.-|h|r")
     if not itemLink then
-      NLC.Utils.Print("Bruk: /nordlc add [shift-klikk item her]")
+      NLC.Utils.Print("Usage: /nordlc add [shift-click item here]")
       return
     end
     local _, _, _, ilvl, _, _, _, _, equipLoc = C_Item.GetItemInfo(itemLink)
@@ -251,11 +251,11 @@ SlashCmdList["NORDLC"] = function(msg)
   elseif cmd == "pending" then
     if #NLC.pendingSessions > 0 then
       for i, session in ipairs(NLC.pendingSessions) do
-        NLC.Utils.Print(string.format("  %d. %s (%s) — %d interesse(r)", i, session.itemLink or "?", session.boss or "?", NLC.Utils.TableCount(session.interests)))
+        NLC.Utils.Print(string.format("  %d. %s (%s) — %d interest(s)", i, session.itemLink or "?", session.boss or "?", NLC.Utils.TableCount(session.interests)))
       end
-      NLC.Utils.Print("Bruk /nordlc resume <nummer> for a gjenoppta.")
+      NLC.Utils.Print("Use /nordlc resume <number> to resume.")
     else
-      NLC.Utils.Print("Ingen ventende items.")
+      NLC.Utils.Print("No pending items.")
     end
   elseif cmd == "resume" then
     if arg == "all" then
@@ -265,25 +265,25 @@ SlashCmdList["NORDLC"] = function(msg)
       if idx then
         NLC.Council.ResumePending(idx)
       else
-        NLC.Utils.Print("Bruk: /nordlc resume <nummer> eller /nordlc resume all")
+        NLC.Utils.Print("Usage: /nordlc resume <number> or /nordlc resume all")
       end
     end
   elseif cmd == "import" then
     if NordavindLC_Import and NordavindLC_Import.players then
       NLC.db.importData = NordavindLC_Import
-      NLC.Utils.Print("Import oppdatert: " .. NLC.Utils.TableCount(NLC.db.importData.players) .. " spillere")
+      NLC.Utils.Print("Import updated: " .. NLC.Utils.TableCount(NLC.db.importData.players) .. " players")
     else
-      NLC.Utils.Print("Ingen import-data funnet. Kjor companion-appen forst.")
+      NLC.Utils.Print("No import data found. Run the companion app first.")
     end
   elseif cmd == "reset" then
     NLC.db.instanceChoices = {}
-    NLC.Utils.Print("Instance-valg nullstilt. Du blir spurt igjen neste gang.")
+    NLC.Utils.Print("Instance choices reset. You will be prompted again.")
   elseif cmd == "status" then
-    NLC.Utils.Print(NLC.active and "Aktiv" or "Inaktiv")
-    NLC.Utils.Print("Officer: " .. (NLC.isOfficer and "Ja" or "Nei"))
-    NLC.Utils.Print("Import: " .. NLC.Utils.TableCount(NLC.db.importData.players or {}) .. " spillere")
-    NLC.Utils.Print("Ventende: " .. #NLC.pendingSessions .. " items")
-    NLC.Utils.Print("Eksport-ko: " .. #(NLC.db.pendingExport or {}) .. " awards")
+    NLC.Utils.Print(NLC.active and "Active" or "Inactive")
+    NLC.Utils.Print("Officer: " .. (NLC.isOfficer and "Yes" or "No"))
+    NLC.Utils.Print("Import: " .. NLC.Utils.TableCount(NLC.db.importData.players or {}) .. " players")
+    NLC.Utils.Print("Pending: " .. #NLC.pendingSessions .. " items")
+    NLC.Utils.Print("Export queue: " .. #(NLC.db.pendingExport or {}) .. " awards")
   elseif cmd == "test" then
     NLC.isOfficer = true
     NLC.active = true
@@ -308,7 +308,7 @@ SlashCmdList["NORDLC"] = function(msg)
         }
       end
       NLC._testSeeded = true
-      NLC.Utils.Print("Mock-data opprettet (5 test-spillere)")
+      NLC.Utils.Print("Mock data created (5 test players)")
     end
 
     local fakeItems = {
@@ -342,7 +342,7 @@ SlashCmdList["NORDLC"] = function(msg)
     end
 
     NLC.UI.ShowWizard(fakeSessions, 1)
-    NLC.Utils.Print("Test wizard vist med " .. #fakeSessions .. " items. Klikk Tildel for a teste auto-advance.")
+    NLC.Utils.Print("Test wizard shown with " .. #fakeSessions .. " items. Click Award to test auto-advance.")
 
   elseif cmd == "testpopup" then
     local fakeItems = {
@@ -350,7 +350,7 @@ SlashCmdList["NORDLC"] = function(msg)
       { itemLink = "|cffa335ee|Hitem:222222::::::::80:::::|h[Dreamrift Shoulders]|h|r", itemId = 222222, ilvl = 639, equipLoc = "INVTYPE_SHOULDER", boss = "Test Boss" },
     }
     NLC.UI.ShowMultiItemPopup(fakeItems, 30)
-    NLC.Utils.Print("Test multi-item popup vist.")
+    NLC.Utils.Print("Test multi-item popup shown.")
 
   elseif cmd == "testloot" then
     NLC.isOfficer = true
@@ -363,7 +363,7 @@ SlashCmdList["NORDLC"] = function(msg)
       { itemLink = "|cffa335ee|Hitem:444444::::::::80:::::|h[Voidspire Trinket]|h|r", itemId = 444444, ilvl = 639, equipLoc = "INVTYPE_TRINKET", boss = "Test Boss", looter = "Player1" },
     }
     NLC.UI.ShowLootDetected(fakeItems)
-    NLC.Utils.Print("Test loot panel vist med 4 items. Fjern de du ikke vil ha, trykk Start Council.")
+    NLC.Utils.Print("Test loot panel shown with 4 items. Remove unwanted items, then click Start Council.")
 
   elseif cmd == "testend" then
     -- Clean up test mode
@@ -373,21 +373,21 @@ SlashCmdList["NORDLC"] = function(msg)
     end
     NLC._testSeeded = nil
     NLC.Council._testSession = nil
-    NLC.Utils.Print("Test-modus avsluttet.")
+    NLC.Utils.Print("Test mode ended.")
 
   else
-    NLC.Utils.Print("Kommandoer:")
-    NLC.Utils.Print("  /nordlc activate — Aktiver addon")
-    NLC.Utils.Print("  /nordlc deactivate — Deaktiver addon")
-    NLC.Utils.Print("  /nordlc add [item] — Start council for et item (shift-klikk)")
-    NLC.Utils.Print("  /nordlc pending — Vis ventende items")
-    NLC.Utils.Print("  /nordlc resume <nr> — Gjenoppta ventende item")
-    NLC.Utils.Print("  /nordlc resume all — Gjenoppta alle ventende i wizard")
-    NLC.Utils.Print("  /nordlc import — Last inn import-data")
-    NLC.Utils.Print("  /nordlc reset — Nullstill instance-valg")
-    NLC.Utils.Print("  /nordlc test — Test wizard med mock-data")
-    NLC.Utils.Print("  /nordlc testend — Avslutt test-modus")
-    NLC.Utils.Print("  /nordlc status — Vis status")
+    NLC.Utils.Print("Commands:")
+    NLC.Utils.Print("  /nordlc activate — Activate addon")
+    NLC.Utils.Print("  /nordlc deactivate — Deactivate addon")
+    NLC.Utils.Print("  /nordlc add [item] — Start council for an item (shift-click)")
+    NLC.Utils.Print("  /nordlc pending — Show pending items")
+    NLC.Utils.Print("  /nordlc resume <nr> — Resume pending item")
+    NLC.Utils.Print("  /nordlc resume all — Resume all pending in wizard")
+    NLC.Utils.Print("  /nordlc import — Load import data")
+    NLC.Utils.Print("  /nordlc reset — Reset instance choices")
+    NLC.Utils.Print("  /nordlc test — Test wizard with mock data")
+    NLC.Utils.Print("  /nordlc testend — End test mode")
+    NLC.Utils.Print("  /nordlc status — Show status")
   end
 end
 

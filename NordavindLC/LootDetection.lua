@@ -49,10 +49,10 @@ local function shouldTrackItem(itemLink, itemID)
   -- Skip cosmetic/decor slots
   if equipLoc == "INVTYPE_BODY" or equipLoc == "INVTYPE_TABARD" then return false end
 
-  -- Skip warbound (account-bound) items
-  if C_Item.IsBoundToAccountUntilEquip and C_Item.IsBoundToAccountUntilEquip(itemID) then return false end
+  -- Skip warbound (account-bound) items — can't be traded
+  if NLC.Utils.IsWarbound(itemLink) then return false end
 
-  return true, ilvl, equipLoc
+  return true, ilvl or 0, equipLoc or ""
 end
 
 lootFrame:SetScript("OnEvent", function(self, event, ...)

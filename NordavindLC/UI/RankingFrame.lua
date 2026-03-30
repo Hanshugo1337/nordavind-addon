@@ -57,7 +57,7 @@ function NLC.UI.ShowRanking(session, candidates)
     local hdrY = -44
     local headers = {
       { text = "RANK",  x = COL.rank },
-      { text = "NAVN",  x = COL.name },
+      { text = "NAME",  x = COL.name },
       { text = "SCORE", x = COL.score },
       { text = "ILVL",  x = COL.ilvl },
       { text = "TIER",  x = COL.tier },
@@ -89,11 +89,11 @@ function NLC.UI.ShowRanking(session, candidates)
     rankFrame.laterBtn = T.CreateButton(rankFrame, 160, 34, "Award Later")
     rankFrame.laterBtn:SetPoint("BOTTOMLEFT", 20, 16)
     rankFrame.laterBtn:SetScript("OnClick", function()
-      NLC.Council.AwardLater()
+      NLC.Council.AwardLaterCurrent()
       rankFrame:Hide()
     end)
 
-    rankFrame.closeBtn = T.CreateButton(rankFrame, 120, 34, "Lukk")
+    rankFrame.closeBtn = T.CreateButton(rankFrame, 120, 34, "Close")
     rankFrame.closeBtn:SetPoint("BOTTOMRIGHT", -20, 16)
     rankFrame.closeBtn:SetScript("OnClick", function()
       rankFrame:Hide()
@@ -287,7 +287,7 @@ function NLC.UI.ShowWizard(sessions, index)
   -- "No interest" skip button if no candidates
   if #ranked == 0 then
     if not rankFrame.skipBtn then
-      rankFrame.skipBtn = T.CreateButton(rankFrame, 200, 40, T.MUTED .. "Ingen interesse — Skip|r")
+      rankFrame.skipBtn = T.CreateButton(rankFrame, 200, 40, T.MUTED .. "No interest — Skip|r")
       rankFrame.skipBtn:SetPoint("CENTER", 0, 0)
     end
     rankFrame.skipBtn:SetScript("OnClick", function()

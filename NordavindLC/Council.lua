@@ -8,10 +8,13 @@ local currentWizardIndex = 0 -- which item officer is viewing in wizard
 local respondents = {}       -- set of player names who have responded
 local raidAddonUsers = 0     -- count of addon users in raid (for auto-close)
 local collectingTimer = nil  -- C_Timer ticker reference
+local _rollCallAcks = {}     -- tracks addon users who responded to roll call
+local _rollCallComplete = false -- true after 3s roll call window
+local _collectingClosed = false -- guard against double CloseCollecting
 
 function NLC.Council.StartMultiSession(items, boss)
   if not NLC.isOfficer then
-    NLC.Utils.Print("Kun officers kan starte council.")
+    NLC.Utils.Print("Only officers can start council.")
     return
   end
 
@@ -19,9 +22,11 @@ function NLC.Council.StartMultiSession(items, boss)
   respondents = {}
   raidAddonUsers = 0
   currentWizardIndex = 1
+  _collectingClosed = false
 
-  for _, item in ipairs(items) do
+  for idx, item in ipairs(items) do
     table.insert(activeSessions, {
+      sessionIdx = idx,
       itemLink = item.itemLink,
       itemId = item.itemId,
       ilvl = item.ilvl,
@@ -33,9 +38,26 @@ function NLC.Council.StartMultiSession(items, boss)
     })
   end
 
-  raidAddonUsers = GetNumGroupMembers()
   NLC.Comms.SendMultiSession(items, boss or items[1].boss or "Unknown")
-  NLC.Utils.Print("Council startet for " .. #items .. " items")
+  NLC.Utils.Print("Council started for " .. #items .. " items")
+
+  -- Count addon users via roll call (3s collection window)
+  _rollCallAcks = {}
+  _rollCallComplete = false
+  NLC.Comms.SendRollCall()
+  C_Timer.After(3, function()
+    local count = 0
+    for _ in pairs(_rollCallAcks) do count = count + 1 end
+    raidAddonUsers = count
+    _rollCallComplete = true
+    -- Check if enough responses already came in during the 3s window
+    local respCount = 0
+    for _ in pairs(respondents) do respCount = respCount + 1 end
+    if raidAddonUsers > 0 and respCount >= raidAddonUsers then
+      if collectingTimer then collectingTimer:Cancel(); collectingTimer = nil end
+      NLC.Council.CloseCollecting()
+    end
+  end)
   NLC.UI.ShowMultiItemPopup(activeSessions, NLC.db.config.timer or 90)
 
   local remaining = NLC.db.config.timer or 90
@@ -59,6 +81,7 @@ function NLC.Council.OnMultiSessionStart(items, timer, sender)
   activeSessions = {}
   for _, item in ipairs(items) do
     table.insert(activeSessions, {
+      sessionIdx = item.sessionIdx,
       itemLink = item.itemLink,
       itemId = item.itemId,
       ilvl = item.ilvl,
@@ -75,12 +98,12 @@ end
 function NLC.Council.SubmitResponses(selections)
   local responses = {}
   for _, session in ipairs(activeSessions) do
-    local sel = selections[session.itemId]
+    local sel = selections[session.sessionIdx]
     if sel and sel.category ~= "pass" then
       local eqLink, eqIlvl = NLC.Utils.GetEquippedInfo(session.equipLoc or "")
       local tierCount = NLC.Utils.GetTierCount()
       table.insert(responses, {
-        itemId = session.itemId,
+        sessionIdx = session.sessionIdx,
         category = sel.category,
         eqIlvl = eqIlvl or 0,
         tierCount = tierCount,
@@ -92,15 +115,15 @@ function NLC.Council.SubmitResponses(selections)
     NLC.Comms.SendMultiInterest(responses)
   end
   NLC.Comms.SendRespond()
-  NLC.Utils.Print("Svar sendt for " .. #responses .. " item(s)")
+  NLC.Utils.Print("Responses sent for " .. #responses .. " item(s)")
 end
 
-function NLC.Council.OnInterestReceived(sender, itemId, category, eqIlvl, tierCount, note)
+function NLC.Council.OnInterestReceived(sender, sessionIdx, category, eqIlvl, tierCount, note)
   if not NLC.isOfficer then return end
 
   local session = nil
   for _, s in ipairs(activeSessions) do
-    if s.itemId == itemId then session = s; break end
+    if s.sessionIdx == sessionIdx then session = s; break end
   end
   if not session then return end
 
@@ -124,30 +147,45 @@ function NLC.Council.OnRespond(sender)
   local count = 0
   for _ in pairs(respondents) do count = count + 1 end
 
-  NLC.Utils.Print(count .. " / " .. raidAddonUsers .. " har svart")
-
-  if count >= raidAddonUsers then
-    if collectingTimer then
-      collectingTimer:Cancel()
-      collectingTimer = nil
+  if _rollCallComplete then
+    NLC.Utils.Print(count .. " / " .. raidAddonUsers .. " responded")
+    if raidAddonUsers > 0 and count >= raidAddonUsers then
+      if collectingTimer then
+        collectingTimer:Cancel()
+        collectingTimer = nil
+      end
+      NLC.Council.CloseCollecting()
     end
-    NLC.Council.CloseCollecting()
+  else
+    NLC.Utils.Print(count .. " responded (counting addon users...)")
   end
 end
 
 function NLC.Council.CloseCollecting()
-  if #activeSessions == 0 then return end
+  if _collectingClosed or #activeSessions == 0 then return end
+  _collectingClosed = true
 
   for _, session in ipairs(activeSessions) do
     session.phase = "ranking"
   end
 
-  NLC.Comms.Send("SESSION_CLOSE", "")
-  NLC.Utils.Print("Collecting lukket. Starter award wizard.")
+  NLC.UI.HideMultiItemPopup()
+  NLC.Utils.Print("Collecting closed. Starting award wizard.")
 
   for _, session in ipairs(activeSessions) do
     session.ranked = NLC.Council.BuildRanking(session)
   end
+
+  -- Broadcast ranking data so all raiders can see the wizard
+  local broadcastData = {}
+  for _, session in ipairs(activeSessions) do
+    table.insert(broadcastData, {
+      sessionIdx = session.sessionIdx, itemLink = session.itemLink, itemId = session.itemId,
+      ilvl = session.ilvl, equipLoc = session.equipLoc,
+      boss = session.boss, ranked = session.ranked, phase = session.phase,
+    })
+  end
+  NLC.Comms.Send("SESSION_CLOSE", broadcastData)
 
   currentWizardIndex = 1
   NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
@@ -165,6 +203,7 @@ function NLC.Council.BuildRanking(session)
         session.equipLoc == "INVTYPE_HEAD" or
         session.equipLoc == "INVTYPE_SHOULDER" or
         session.equipLoc == "INVTYPE_CHEST" or
+        session.equipLoc == "INVTYPE_ROBE" or
         session.equipLoc == "INVTYPE_HAND" or
         session.equipLoc == "INVTYPE_LEGS"
       ),
@@ -204,9 +243,9 @@ function NLC.Council.Award(playerName)
   local session = activeSessions[currentWizardIndex]
   if not session then return end
 
-  NLC.Comms.Send("AWARD", session.itemLink .. ":" .. playerName)
+  NLC.Comms.Send("AWARD", { sessionIdx = session.sessionIdx, itemLink = session.itemLink, playerName = playerName })
   NLC.RecordAward(session.itemLink, playerName, UnitName("player"), session.boss)
-  NLC.Utils.Print(session.itemLink .. " tildelt " .. playerName)
+  NLC.Utils.Print(session.itemLink .. " awarded to " .. playerName)
 
   local imported = NLC.Scoring.GetImportedScore(playerName)
   if imported then
@@ -215,7 +254,8 @@ function NLC.Council.Award(playerName)
   end
 
   if IsInRaid() then
-    SendChatMessage(session.itemLink .. " -> " .. playerName, "RAID_WARNING")
+    local chatType = (UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")) and "RAID_WARNING" or "RAID"
+    SendChatMessage(session.itemLink .. " -> " .. playerName, chatType)
   end
 
   for i, s in ipairs(activeSessions) do
@@ -229,6 +269,7 @@ function NLC.Council.Award(playerName)
 end
 
 function NLC.Council.AdvanceWizard()
+  -- Search forward first, then wrap around to beginning
   for i = currentWizardIndex + 1, #activeSessions do
     if activeSessions[i].phase == "ranking" then
       currentWizardIndex = i
@@ -236,7 +277,14 @@ function NLC.Council.AdvanceWizard()
       return
     end
   end
-  NLC.Utils.Print("Alle items tildelt!")
+  for i = 1, currentWizardIndex - 1 do
+    if activeSessions[i].phase == "ranking" then
+      currentWizardIndex = i
+      NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
+      return
+    end
+  end
+  NLC.Utils.Print("All items awarded!")
   NLC.UI.HideWizard()
   activeSessions = {}
 end
@@ -247,7 +295,7 @@ function NLC.Council.AwardLaterCurrent()
   if not session then return end
 
   table.insert(NLC.pendingSessions, session)
-  NLC.Utils.Print(session.itemLink .. " lagt til ventende")
+  NLC.Utils.Print(session.itemLink .. " added to pending")
   NLC.UpdateMinimapCount()
 
   session.phase = "deferred"
@@ -288,7 +336,7 @@ end
 
 function NLC.Council.ResumeAll()
   if #NLC.pendingSessions == 0 then
-    NLC.Utils.Print("Ingen ventende items.")
+    NLC.Utils.Print("No pending items.")
     return
   end
 
@@ -303,9 +351,39 @@ function NLC.Council.ResumeAll()
 
   currentWizardIndex = 1
   NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
-  NLC.Utils.Print("Wizard apnet med " .. #activeSessions .. " ventende items.")
+  NLC.Utils.Print("Wizard opened with " .. #activeSessions .. " pending items.")
 end
 
-function NLC.Council.OnAward(itemLink, playerName, sender)
-  NLC.Utils.Print(itemLink .. " tildelt " .. playerName .. " (av " .. sender .. ")")
+function NLC.Council.OnAward(sessionIdx, itemLink, playerName, sender)
+  NLC.Utils.Print(itemLink .. " awarded to " .. playerName .. " (by " .. sender .. ")")
+
+  -- Non-officers: update read-only wizard display
+  if not NLC.isOfficer then
+    for _, session in ipairs(activeSessions) do
+      if session.sessionIdx == sessionIdx then
+        session.phase = "awarded"
+        break
+      end
+    end
+    -- Advance to next unawarded item
+    for i = 1, #activeSessions do
+      if activeSessions[i].phase == "ranking" then
+        currentWizardIndex = i
+        NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
+        return
+      end
+    end
+    NLC.UI.HideWizard()
+  end
+end
+
+function NLC.Council.OnSessionClose(data)
+  activeSessions = data
+  currentWizardIndex = 1
+  NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
+end
+
+function NLC.Council.OnRollCallAck(sender)
+  local name = sender:match("^([^-]+)") or sender
+  _rollCallAcks[name] = true
 end

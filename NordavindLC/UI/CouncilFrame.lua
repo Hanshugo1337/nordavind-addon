@@ -42,14 +42,28 @@ local function createItemRow(parent, index, item)
     eqText:SetText(T.MUTED .. "Ingen item i slot|r")
   end
 
-  local categories = {
+  local available = NLC.Utils.GetAvailableCategories(item.itemLink, item.equipLoc)
+  local allCategories = {
     { id = "upgrade",  label = T.GOLD_LIGHT .. "Upgrade|r", width = 110 },
     { id = "catalyst", label = "|cff9933ffCatalyst|r",      width = 95 },
     { id = "offspec",  label = "|cff3399ffOffspec|r",       width = 95 },
     { id = "tmog",     label = T.GOLD .. "Tmog|r",          width = 80 },
   }
+  local categories = {}
+  for _, cat in ipairs(allCategories) do
+    if available[cat.id] then table.insert(categories, cat) end
+  end
 
   local rowData = { buttons = {}, noteBox = nil, selection = nil, noteText = "" }
+
+  if #categories == 0 then
+    local noUse = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    noUse:SetPoint("TOPLEFT", 12, -52)
+    noUse:SetText(T.MUTED .. "Not usable by your class|r")
+    itemRows[item.sessionIdx] = rowData
+    return row
+  end
+
   local btnX = 12
 
   for _, cat in ipairs(categories) do
@@ -95,7 +109,7 @@ local function createItemRow(parent, index, item)
   noteBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
   rowData.noteBox = noteBox
 
-  itemRows[item.itemId] = rowData
+  itemRows[item.sessionIdx] = rowData
   return row
 end
 
@@ -167,9 +181,9 @@ function NLC.UI.ShowMultiItemPopup(sessions, timer)
   multiFrame.sendBtn:SetScript("OnClick", function()
     local selections = {}
     for _, session in ipairs(sessions) do
-      local rowData = itemRows[session.itemId]
+      local rowData = itemRows[session.sessionIdx]
       if rowData and rowData.selection then
-        selections[session.itemId] = {
+        selections[session.sessionIdx] = {
           category = rowData.selection,
           note = rowData.selection == "upgrade" and rowData.noteText or "",
         }
@@ -198,6 +212,13 @@ function NLC.UI.ShowMultiItemPopup(sessions, timer)
   end, timer)
 end
 
+function NLC.UI.HideMultiItemPopup()
+  if multiFrame and multiFrame:IsShown() then
+    if multiFrame._ticker then multiFrame._ticker:Cancel() end
+    multiFrame:Hide()
+  end
+end
+
 -- ============================================================
 -- LOOT DETECTED PANEL (officer only)
 -- Shows all dropped items with remove buttons, then "Start Council" queues them all
@@ -222,7 +243,7 @@ local function refreshLootPanel(items)
   if count == 0 then
     local empty = lootPanel.content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     empty:SetPoint("CENTER", 0, 0)
-    empty:SetText(T.MUTED .. "Ingen items igjen|r")
+    empty:SetText(T.MUTED .. "No items remaining|r")
     empty:Show()
     lootPanel.startBtn:Disable()
     lootPanel.countText:SetText("")
@@ -261,7 +282,7 @@ local function refreshLootPanel(items)
       NLC.LootDetection.RemoveItem(i)
       local remaining = NLC.LootDetection.GetDroppedItems()
       refreshLootPanel(remaining)
-      NLC.Utils.Print("Fjernet: " .. (item.itemLink or "?"))
+      NLC.Utils.Print("Removed: " .. (item.itemLink or "?"))
     end)
   end
 end
