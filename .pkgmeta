@@ -9,6 +9,3 @@ ignore:
   - .github
 
 enable-nolib-creation: no
-
-move-folders:
-  nordavind-addon/NordavindLC: NordavindLC
