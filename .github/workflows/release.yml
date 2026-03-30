@@ -41,7 +41,7 @@ jobs:
             "changelog": "See https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}",
             "changelogType": "text",
             "displayName": "NordavindLC ${{ steps.version.outputs.version }}",
-            "gameVersions": [11857],
+            "gameVersions": [14422],
             "releaseType": "release"
           }
           META
