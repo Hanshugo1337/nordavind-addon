@@ -11,4 +11,4 @@ ignore:
 enable-nolib-creation: no
 
 move-folders:
-  NordavindLC: NordavindLC
+  nordavind-addon/NordavindLC: NordavindLC
