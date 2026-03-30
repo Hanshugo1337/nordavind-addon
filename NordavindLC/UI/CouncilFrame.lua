@@ -5,6 +5,47 @@ local NLC = NordavindLC_NS
 local T = NLC.Theme
 
 -- ============================================================
+-- TOOLTIP HELPERS
+-- ============================================================
+local CATEGORY_TIPS = {
+  upgrade  = "Du trenger dette itemet som en direkte oppgradering\nfor din main spec.",
+  catalyst = "Du vil bruke Catalyst for å gjøre dette\ntil tier-set piece.",
+  offspec  = "Du trenger dette for off spec\n(annen rolle enn main).",
+  tmog     = "Du vil ha dette itemet for transmog\n(utseende).",
+}
+
+local function AddItemTooltip(frame, itemLink)
+  frame:EnableMouse(true)
+  frame:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetHyperlink(itemLink)
+    GameTooltip:Show()
+  end)
+  frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
+local function AddTextTooltip(frame, title, lines)
+  frame:EnableMouse(true)
+  frame:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(title, 1, 0.82, 0)
+    if type(lines) == "string" then
+      GameTooltip:AddLine(lines, 1, 1, 1, true)
+    elseif type(lines) == "table" then
+      for _, line in ipairs(lines) do
+        if line.left and line.right then
+          GameTooltip:AddDoubleLine(line.left, line.right, line.lr or 0.6, line.lg or 0.6, line.lb or 0.6, line.rr or 1, line.rg or 1, line.rb or 1)
+        else
+          GameTooltip:AddLine(line.text or line, line.r or 1, line.g or 1, line.b or 1, true)
+        end
+      end
+    end
+    GameTooltip:Show()
+  end)
+  frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
+-- ============================================================
 -- MULTI-ITEM INTEREST POPUP
 -- ============================================================
 local multiFrame = nil
@@ -22,6 +63,12 @@ local function createItemRow(parent, index, item)
   local bg = row:CreateTexture(nil, "BACKGROUND")
   bg:SetAllPoints()
   bg:SetColorTexture(1, 1, 1, index % 2 == 0 and 0.04 or 0)
+
+  -- Invisible overlay for item tooltip on hover
+  local itemHover = CreateFrame("Frame", nil, row)
+  itemHover:SetSize(ITEM_ROW_WIDTH - 24, 18)
+  itemHover:SetPoint("TOPLEFT", 12, -6)
+  if item.itemLink then AddItemTooltip(itemHover, item.itemLink) end
 
   local itemText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   itemText:SetPoint("TOPLEFT", 12, -8)
@@ -92,6 +139,17 @@ local function createItemRow(parent, index, item)
         end
       end
     end)
+
+    -- Category tooltip
+    if CATEGORY_TIPS[cat.id] then
+      btn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:AddLine(cat.id:sub(1,1):upper() .. cat.id:sub(2), 1, 0.82, 0)
+        GameTooltip:AddLine(CATEGORY_TIPS[cat.id], 1, 1, 1, true)
+        GameTooltip:Show()
+      end)
+      btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
 
     rowData.buttons[cat.id] = btn
     btnX = btnX + cat.width + 6

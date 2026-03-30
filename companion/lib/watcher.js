@@ -54,7 +54,7 @@ class SavedVarsWatcher {
 
     if (existing.includes("NordavindLC_Import")) {
       existing = existing.replace(
-        /NordavindLC_Import\s*=\s*\{[^]*?\n\}/,
+        /NordavindLC_Import\s*=\s*(?:\{[^]*?\n\}|nil)/,
         importStr.trim()
       );
     } else {

@@ -63,6 +63,10 @@ frame:SetScript("OnEvent", function(self, event, arg1)
 
   elseif event == "PLAYER_LOGOUT" then
     NordavindLC_DB = NLC.db
+    -- Preserve import data so companion app's writes survive logout
+    if NLC.db.importData and NLC.db.importData.players and next(NLC.db.importData.players) then
+      NordavindLC_Import = NLC.db.importData
+    end
   end
 end)
 
@@ -204,12 +208,13 @@ function NLC.Deactivate()
   NLC.Utils.Print("Deactivated.")
 end
 
-function NLC.RecordAward(item, awardedTo, awardedBy, boss)
+function NLC.RecordAward(item, awardedTo, awardedBy, boss, category)
   local entry = {
     item = item,
     awardedTo = awardedTo,
     awardedBy = awardedBy,
     boss = boss or "Unknown",
+    category = category or "upgrade",
     timestamp = time(),
   }
   table.insert(NLC.db.lootHistory, entry)

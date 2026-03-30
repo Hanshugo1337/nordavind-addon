@@ -134,10 +134,10 @@ local JEWELRY_SLOTS = { INVTYPE_FINGER = true, INVTYPE_TRINKET = true, INVTYPE_N
 local WEAPON_SLOTS = { INVTYPE_WEAPON = true, INVTYPE_2HWEAPON = true, INVTYPE_WEAPONMAINHAND = true, INVTYPE_WEAPONOFFHAND = true, INVTYPE_HOLDABLE = true, INVTYPE_SHIELD = true, INVTYPE_RANGED = true }
 
 function NLC.Utils.GetAvailableCategories(itemLink, equipLoc)
-  local result = { upgrade = false, catalyst = false, offspec = false, tmog = false }
+  local result = { upgrade = false, catalyst = false, offspec = false, tmog = true }
   if not itemLink then return result end
 
-  -- Recipes or items without equipLoc — show upgrade only
+  -- Recipes or items without equipLoc — show upgrade + tmog
   if not equipLoc or equipLoc == "" then
     result.upgrade = true
     return result
@@ -150,7 +150,6 @@ function NLC.Utils.GetAvailableCategories(itemLink, equipLoc)
   if JEWELRY_SLOTS[equipLoc] then
     result.upgrade = true
     result.offspec = true
-    result.tmog = true
     return result
   end
 
@@ -159,7 +158,6 @@ function NLC.Utils.GetAvailableCategories(itemLink, equipLoc)
     if IsEquippableItem(itemLink) then
       result.upgrade = true
       result.offspec = true
-      result.tmog = true
     end
     return result
   end
@@ -172,13 +170,9 @@ function NLC.Utils.GetAvailableCategories(itemLink, equipLoc)
       -- Primary armor type — full options
       result.upgrade = true
       result.offspec = true
-      result.tmog = true
       if TIER_SLOTS[equipLoc] then
         result.catalyst = true
       end
-    elseif IsEquippableItem(itemLink) then
-      -- Can equip but not primary type (e.g. plate user + cloth) — tmog only
-      result.tmog = true
     end
   end
 

@@ -53,8 +53,9 @@ function NLC.UI.ShowRanking(session, candidates)
     local closeX = CreateFrame("Button", nil, rankFrame, "UIPanelCloseButton")
     closeX:SetPoint("TOPRIGHT", -2, -2)
 
-    -- Column headers
-    local hdrY = -44
+    -- Column headers (pushed down to make room for item info in wizard mode)
+    local hdrY = -62
+    rankFrame.headerTexts = {}
     local headers = {
       { text = "RANK",  x = COL.rank },
       { text = "NAME",  x = COL.name },
@@ -67,6 +68,7 @@ function NLC.UI.ShowRanking(session, candidates)
       local ht = rankFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
       ht:SetPoint("TOPLEFT", h.x, hdrY)
       ht:SetText(T.GOLD_DIM .. h.text .. "|r")
+      table.insert(rankFrame.headerTexts, ht)
     end
 
     -- Header separator
@@ -99,6 +101,23 @@ function NLC.UI.ShowRanking(session, candidates)
       rankFrame:Hide()
     end)
   end
+
+  -- Item tooltip hover on item info line
+  if not rankFrame.itemHover then
+    rankFrame.itemHover = CreateFrame("Frame", nil, rankFrame)
+    rankFrame.itemHover:SetSize(FRAME_WIDTH - 100, 20)
+    rankFrame.itemHover:SetPoint("TOP", 0, -36)
+    rankFrame.itemHover:EnableMouse(true)
+  end
+  if session.itemLink then
+    rankFrame.itemHover:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+      GameTooltip:SetHyperlink(session.itemLink)
+      GameTooltip:Show()
+    end)
+    rankFrame.itemHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  end
+  rankFrame.itemHover:Show()
 
   -- Update title with item link
   rankFrame.title:SetText(T.GOLD .. "Loot Council|r  " .. T.MUTED .. "—|r  " .. (session.itemLink or "?"))
@@ -162,15 +181,67 @@ function NLC.UI.ShowRanking(session, candidates)
     rankText:SetJustifyH("LEFT")
     rankText:SetText(string.format("|cff%02x%02x%02x%s|r", rc.r * 255, rc.g * 255, rc.b * 255, (c.rank or "?"):upper()))
 
-    -- Name (class colored, larger font)
+    -- Name (class colored, larger font) with player tooltip
     local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     nameText:SetPoint("LEFT", COL.name, 0)
     nameText:SetText(NLC.Utils.ClassColoredName(c.name, c.class))
 
-    -- Score (gold, prominent)
+    -- Player tooltip hover area
+    local nameHover = CreateFrame("Frame", nil, row)
+    nameHover:SetSize(160, ROW_HEIGHT)
+    nameHover:SetPoint("LEFT", COL.name, 0)
+    nameHover:EnableMouse(true)
+    nameHover:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:AddLine(c.name, 1, 0.82, 0)
+      GameTooltip:AddLine(" ")
+      if c.breakdown then
+        for _, line in ipairs(c.breakdown) do
+          GameTooltip:AddDoubleLine(line.label or "", string.format("%.1f", line.value or 0), 0.6, 0.6, 0.6, 1, 1, 1)
+        end
+        GameTooltip:AddLine(" ")
+      end
+      GameTooltip:AddDoubleLine("Total Score", string.format("%.1f", c.score or 0), 1, 0.82, 0, 0.2, 1, 0.2)
+      GameTooltip:AddDoubleLine("Equipped ilvl", tostring(c.equippedIlvl or "?"), 0.6, 0.6, 0.6, 1, 1, 1)
+      GameTooltip:AddDoubleLine("ilvl diff", (c.ilvlDiff and c.ilvlDiff > 0 and "+" or "") .. tostring(c.ilvlDiff or 0), 0.6, 0.6, 0.6, 1, 1, 1)
+      GameTooltip:AddDoubleLine("Tier pieces", tostring(c.tierCount or 0) .. "pc", 0.6, 0.6, 0.6, 1, 1, 1)
+      GameTooltip:AddDoubleLine("Rank", (c.rank or "?"):upper(), 0.6, 0.6, 0.6, 1, 1, 1)
+      if c.note then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Note: " .. c.note, 0.8, 0.8, 0.8, true)
+      end
+      if c.warnings and #c.warnings > 0 then
+        GameTooltip:AddLine(" ")
+        for _, w in ipairs(c.warnings) do
+          GameTooltip:AddLine(w, 1, 0.5, 0, true)
+        end
+      end
+      GameTooltip:Show()
+    end)
+    nameHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Score (gold, prominent) with breakdown tooltip
     local scoreText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     scoreText:SetPoint("LEFT", COL.score, 0)
     scoreText:SetText(T.GOLD_LIGHT .. string.format("%.1f", c.score) .. "|r")
+
+    local scoreHover = CreateFrame("Frame", nil, row)
+    scoreHover:SetSize(80, ROW_HEIGHT)
+    scoreHover:SetPoint("LEFT", COL.score, 0)
+    scoreHover:EnableMouse(true)
+    scoreHover:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:AddLine("Score Breakdown", 1, 0.82, 0)
+      if c.breakdown then
+        for _, line in ipairs(c.breakdown) do
+          GameTooltip:AddDoubleLine(line.label or "", string.format("%.1f", line.value or 0), 0.6, 0.6, 0.6, 1, 1, 1)
+        end
+      end
+      GameTooltip:AddLine(" ")
+      GameTooltip:AddDoubleLine("Total", string.format("%.1f", c.score or 0), 1, 0.82, 0, 0.2, 1, 0.2)
+      GameTooltip:Show()
+    end)
+    scoreHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- ilvl diff
     local ilvlText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -178,11 +249,40 @@ function NLC.UI.ShowRanking(session, candidates)
     local diffColor = (c.ilvlDiff or 0) > 0 and T.GREEN or T.RED
     ilvlText:SetText(diffColor .. ((c.ilvlDiff or 0) > 0 and "+" or "") .. (c.ilvlDiff or 0) .. " ilvl|r")
 
+    local ilvlHover = CreateFrame("Frame", nil, row)
+    ilvlHover:SetSize(70, ROW_HEIGHT)
+    ilvlHover:SetPoint("LEFT", COL.ilvl, 0)
+    ilvlHover:EnableMouse(true)
+    ilvlHover:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:AddLine("Item Level", 1, 0.82, 0)
+      GameTooltip:AddDoubleLine("Equipped", tostring(c.equippedIlvl or "?"), 0.6, 0.6, 0.6, 1, 1, 1)
+      GameTooltip:AddDoubleLine("This item", tostring(session.ilvl or "?"), 0.6, 0.6, 0.6, 1, 1, 1)
+      GameTooltip:AddDoubleLine("Difference", (c.ilvlDiff and c.ilvlDiff > 0 and "+" or "") .. tostring(c.ilvlDiff or 0), 0.6, 0.6, 0.6, c.ilvlDiff and c.ilvlDiff > 0 and 0.2 or 1, c.ilvlDiff and c.ilvlDiff > 0 and 1 or 0.3, c.ilvlDiff and c.ilvlDiff > 0 and 0.2 or 0.3)
+      GameTooltip:Show()
+    end)
+    ilvlHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
     -- Tier count
     local tierText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     tierText:SetPoint("LEFT", COL.tier, 0)
     local tierColor = (c.tierCount == 1 or c.tierCount == 3) and T.GREEN or T.WHITE
     tierText:SetText(tierColor .. (c.tierCount or 0) .. "pc|r")
+
+    local tierHover = CreateFrame("Frame", nil, row)
+    tierHover:SetSize(50, ROW_HEIGHT)
+    tierHover:SetPoint("LEFT", COL.tier, 0)
+    tierHover:EnableMouse(true)
+    tierHover:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:AddLine("Tier Pieces", 1, 0.82, 0)
+      GameTooltip:AddLine(c.name .. " har " .. (c.tierCount or 0) .. " tier pieces equipped.", 1, 1, 1, true)
+      if c.tierCount == 1 or c.tierCount == 3 then
+        GameTooltip:AddLine("Neste tier-bonus ved " .. ((c.tierCount or 0) + 1) .. "pc!", 0.2, 1, 0.2)
+      end
+      GameTooltip:Show()
+    end)
+    tierHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- Warnings
     if c.warnings and #c.warnings > 0 then
@@ -238,7 +338,7 @@ function NLC.UI.ShowWizard(sessions, index)
   -- Show item info below title
   if not rankFrame.itemInfo then
     rankFrame.itemInfo = rankFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    rankFrame.itemInfo:SetPoint("TOP", 0, -34)
+    rankFrame.itemInfo:SetPoint("TOP", 0, -38)
   end
   rankFrame.itemInfo:SetText((session.itemLink or "?") .. "  " .. T.MUTED .. "ilvl " .. (session.ilvl or 0) .. "|r")
   rankFrame.itemInfo:Show()

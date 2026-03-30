@@ -73,7 +73,7 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
 
   elseif msgType == "AWARD" then
     if NLC.Council.OnAward then
-      NLC.Council.OnAward(data.sessionIdx, data.itemLink, data.playerName, sender)
+      NLC.Council.OnAward(data.sessionIdx, data.itemLink, data.playerName, sender, data.category)
     end
 
   elseif msgType == "SESSION_CLOSE" then

@@ -245,9 +245,20 @@ function NLC.Council.Award(playerName)
   local session = activeSessions[currentWizardIndex]
   if not session then return end
 
-  NLC.Comms.Send("AWARD", { sessionIdx = session.sessionIdx, itemLink = session.itemLink, playerName = playerName })
-  NLC.RecordAward(session.itemLink, playerName, UnitName("player"), session.boss)
-  NLC.Utils.Print(session.itemLink .. " awarded to " .. playerName)
+  -- Find the player's interest category from ranking
+  local category = "upgrade"
+  if session.ranked then
+    for _, c in ipairs(session.ranked) do
+      if c.name == playerName then
+        category = c.category or "upgrade"
+        break
+      end
+    end
+  end
+
+  NLC.Comms.Send("AWARD", { sessionIdx = session.sessionIdx, itemLink = session.itemLink, playerName = playerName, category = category })
+  NLC.RecordAward(session.itemLink, playerName, UnitName("player"), session.boss, category)
+  NLC.Utils.Print(session.itemLink .. " awarded to " .. playerName .. " (" .. category .. ")")
 
   local imported = NLC.Scoring.GetImportedScore(playerName)
   if imported then
@@ -257,7 +268,7 @@ function NLC.Council.Award(playerName)
 
   if IsInRaid() then
     local chatType = (UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")) and "RAID_WARNING" or "RAID"
-    SendChatMessage(session.itemLink .. " -> " .. playerName, chatType)
+    SendChatMessage(playerName .. " has been awarded " .. session.itemLink .. " for " .. category, chatType)
   end
 
   for i, s in ipairs(activeSessions) do
@@ -356,8 +367,9 @@ function NLC.Council.ResumeAll()
   NLC.Utils.Print("Wizard opened with " .. #activeSessions .. " pending items.")
 end
 
-function NLC.Council.OnAward(sessionIdx, itemLink, playerName, sender)
-  NLC.Utils.Print(itemLink .. " awarded to " .. playerName .. " (by " .. sender .. ")")
+function NLC.Council.OnAward(sessionIdx, itemLink, playerName, sender, category)
+  local catText = category and (" for " .. category) or ""
+  NLC.Utils.Print(playerName .. " has been awarded " .. itemLink .. catText)
 
   -- Non-officers: update read-only wizard display
   if not NLC.isOfficer then
