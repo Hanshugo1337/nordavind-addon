@@ -41,6 +41,14 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
     return
   end
 
+  -- Non-leader asking if leader is active — respond with ACTIVATE
+  if msgType == "ACTIVATE_CHECK" then
+    if NLC.active and UnitIsGroupLeader("player") then
+      NLC.Comms.Send("ACTIVATE", "")
+    end
+    return
+  end
+
   -- SESSION_START also auto-activates (in case raider missed ACTIVATE or joined late)
   if not NLC.active and msgType == "SESSION_START" then
     NLC.Activate()
@@ -88,6 +96,15 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
   elseif msgType == "ROLL_CALL_ACK" then
     if NLC.Council.OnRollCallAck then
       NLC.Council.OnRollCallAck(sender)
+    end
+
+  elseif msgType == "VERSION_CHECK" then
+    NLC.Comms.Send("VERSION_REPLY", NLC.version)
+
+  elseif msgType == "VERSION_REPLY" then
+    if NLC.versionCheckResults then
+      local name = sender:match("^([^-]+)") or sender
+      NLC.versionCheckResults[name] = data
     end
   end
 end

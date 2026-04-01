@@ -8,7 +8,7 @@ class ApiClient {
 
   async exportScoring() {
     const res = await fetch(`${this.baseUrl}/api/loot/addon-export`, {
-      headers: { "x-api-key": this.apiKey, "Host": "nordavind.cc" },
+      headers: { "x-api-key": this.apiKey },
       signal: AbortSignal.timeout(30000),
     });
     if (!res.ok) throw new Error(`Export failed: ${res.status} ${await res.text()}`);

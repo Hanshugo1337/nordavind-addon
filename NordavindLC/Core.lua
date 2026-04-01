@@ -4,6 +4,9 @@
 local ADDON_NAME = ...
 local NLC = NordavindLC_NS
 
+-- Version from TOC
+NLC.version = C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "?"
+
 -- State
 NLC.active = false
 NLC.isOfficer = false
@@ -17,6 +20,7 @@ frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("PARTY_LEADER_CHANGED")
 frame:RegisterEvent("PLAYER_LOGOUT")
+frame:RegisterEvent("GROUP_ROSTER_UPDATE")
 
 frame:SetScript("OnEvent", function(self, event, arg1)
   if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
@@ -55,10 +59,18 @@ frame:SetScript("OnEvent", function(self, event, arg1)
             else
               NLC.UI.ShowActivationPrompt(key)
             end
+          else
+            -- Non-leader: ask if leader has addon active
+            NLC.Comms.Send("ACTIVATE_CHECK", "")
           end
-          -- Non-leaders activate when they receive ACTIVATE from leader
         end
       end)
+    end
+
+  elseif event == "GROUP_ROSTER_UPDATE" then
+    -- Leader re-broadcasts ACTIVATE when roster changes (new players joining)
+    if NLC.active and IsInRaid() and UnitIsGroupLeader("player") then
+      NLC.Comms.Send("ACTIVATE", "")
     end
 
   elseif event == "PLAYER_LOGOUT" then
@@ -81,122 +93,48 @@ function NLC.CheckOfficer()
   return false
 end
 
--- Minimap button — orbits minimap edge like other addon icons
-local minimapBtn = nil
-local minimapAngle = 220 -- degrees, saved position around minimap
+-- AddonCompartment handles the minimap icon via TOC fields
 
-local function UpdateMinimapPosition()
-  local rad = math.rad(minimapAngle)
-  local x = math.cos(rad) * 80
-  local y = math.sin(rad) * 80
-  minimapBtn:SetPoint("CENTER", Minimap, "CENTER", x, y)
+-- AddonCompartment (minimap addon menu) handlers
+function NordavindLC_OnAddonCompartmentClick(_, button)
+  if button == "LeftButton" then
+    if #NLC.pendingSessions > 0 then
+      SlashCmdList["NORDLC"]("pending")
+    else
+      SlashCmdList["NORDLC"]("status")
+    end
+  elseif button == "RightButton" then
+    if NLC.active then
+      NLC.Deactivate()
+    else
+      NLC.Activate()
+    end
+  end
 end
 
-function NLC.CreateMinimapButton()
-  if minimapBtn then minimapBtn:Show(); return end
-
-  minimapBtn = CreateFrame("Button", "NordavindLCMinimap", Minimap)
-  minimapBtn:SetSize(32, 32)
-  minimapBtn:SetFrameStrata("MEDIUM")
-  minimapBtn:SetFrameLevel(8)
-  minimapBtn:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
-  minimapBtn:EnableMouse(true)
-  minimapBtn:RegisterForDrag("LeftButton")
-
-  local icon = minimapBtn:CreateTexture(nil, "ARTWORK")
-  icon:SetSize(26, 26)
-  icon:SetPoint("CENTER")
-  icon:SetTexture("Interface\\AddOns\\NordavindLC\\logo")
-  minimapBtn.icon = icon
-
-  -- Circular mask so the icon blends with the minimap
-  local mask = minimapBtn:CreateMaskTexture()
-  mask:SetSize(26, 26)
-  mask:SetPoint("CENTER")
-  mask:SetTexture("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
-  icon:AddMaskTexture(mask)
-
-  local border = minimapBtn:CreateTexture(nil, "OVERLAY")
-  border:SetSize(52, 52)
-  border:SetPoint("CENTER", 0, 0)
-  border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
-  minimapBtn.border = border
-
-  -- Pending count text
-  local countText = minimapBtn:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-  countText:SetPoint("BOTTOMRIGHT", 2, 2)
-  countText:SetText("")
-  minimapBtn.countText = countText
-
-  -- Restore saved angle
-  if NLC.db and NLC.db.minimapAngle then
-    minimapAngle = NLC.db.minimapAngle
+function NordavindLC_OnAddonCompartmentEnter(_, menuButtonFrame)
+  GameTooltip:SetOwner(menuButtonFrame, "ANCHOR_LEFT")
+  GameTooltip:AddLine("NordavindLC", 0, 0.8, 1)
+  GameTooltip:AddLine(NLC.active and "|cff00ff00Active|r" or "|cffff0000Inactive|r", 1, 1, 1)
+  if NLC.isOfficer then
+    GameTooltip:AddLine("Officer mode", 0.5, 1, 0.5)
   end
-  UpdateMinimapPosition()
+  local pending = #NLC.pendingSessions
+  if pending > 0 then
+    GameTooltip:AddLine(pending .. " pending items", 1, 0.8, 0)
+  end
+  GameTooltip:AddLine(" ")
+  GameTooltip:AddLine("Left-click: Status / Pending", 0.6, 0.6, 0.6)
+  GameTooltip:AddLine("Right-click: Activate/Deactivate", 0.6, 0.6, 0.6)
+  GameTooltip:Show()
+end
 
-  minimapBtn:SetScript("OnClick", function(self, button)
-    if button == "LeftButton" then
-      if #NLC.pendingSessions > 0 then
-        SlashCmdList["NORDLC"]("pending")
-      else
-        SlashCmdList["NORDLC"]("status")
-      end
-    elseif button == "RightButton" then
-      NLC.Deactivate()
-      if minimapBtn then minimapBtn:Hide() end
-    end
-  end)
-  minimapBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-
-  -- Drag around minimap edge
-  local isDragging = false
-  minimapBtn:SetScript("OnDragStart", function(self)
-    isDragging = true
-    self:SetScript("OnUpdate", function()
-      local mx, my = Minimap:GetCenter()
-      local cx, cy = GetCursorPosition()
-      local scale = Minimap:GetEffectiveScale()
-      cx, cy = cx / scale, cy / scale
-      minimapAngle = math.deg(math.atan2(cy - my, cx - mx))
-      UpdateMinimapPosition()
-    end)
-  end)
-  minimapBtn:SetScript("OnDragStop", function(self)
-    isDragging = false
-    self:SetScript("OnUpdate", nil)
-    -- Save angle
-    if NLC.db then NLC.db.minimapAngle = minimapAngle end
-  end)
-
-  minimapBtn:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:AddLine("NordavindLC", 0, 0.8, 1)
-    GameTooltip:AddLine(NLC.active and "|cff00ff00Active|r" or "|cffff0000Inactive|r", 1, 1, 1)
-    if NLC.isOfficer then
-      GameTooltip:AddLine("Officer mode", 0.5, 1, 0.5)
-    end
-    local pending = #NLC.pendingSessions
-    if pending > 0 then
-      GameTooltip:AddLine(pending .. " pending items", 1, 0.8, 0)
-    end
-    GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("Left-click: Status / Pending", 0.6, 0.6, 0.6)
-    GameTooltip:AddLine("Right-click: Deactivate", 0.6, 0.6, 0.6)
-    GameTooltip:Show()
-  end)
-  minimapBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-  minimapBtn:Show()
+function NordavindLC_OnAddonCompartmentLeave()
+  GameTooltip:Hide()
 end
 
 function NLC.UpdateMinimapCount()
-  if not minimapBtn then return end
-  local pending = #NLC.pendingSessions
-  if pending > 0 then
-    minimapBtn.countText:SetText("|cffff8800" .. pending .. "|r")
-  else
-    minimapBtn.countText:SetText("")
-  end
+  -- No-op: compartment doesn't support dynamic count display
 end
 
 function NLC.Activate()
@@ -204,14 +142,12 @@ function NLC.Activate()
   NLC.CheckOfficer()
   NLC.Comms.Register()
   NLC.LootDetection.Register()
-  NLC.CreateMinimapButton()
   NLC.Utils.Print("Activated! " .. (NLC.isOfficer and "(Officer mode)" or "(Raider mode)"))
 end
 
 function NLC.Deactivate()
   NLC.active = false
   NLC.LootDetection.Unregister()
-  if minimapBtn then minimapBtn:Hide() end
   NLC.Utils.Print("Deactivated.")
 end
 
@@ -245,15 +181,24 @@ SlashCmdList["NORDLC"] = function(msg)
       NLC.Utils.Print("Only officers can start council.")
       return
     end
-    -- arg contains the item link (preserved case)
-    local itemLink = arg:match("|c.-|h.-|h|r")
-    if not itemLink then
-      NLC.Utils.Print("Usage: /nordlc add [shift-click item here]")
+    -- arg contains one or more item links (preserved case)
+    local items = {}
+    for itemLink in arg:gmatch("|c.-|h.-|h|r") do
+      local _, _, _, ilvl, _, _, _, _, equipLoc = C_Item.GetItemInfo(itemLink)
+      local itemId = C_Item.GetItemInfoInstant(itemLink)
+      table.insert(items, {
+        itemLink = itemLink,
+        itemId = itemId or 0,
+        ilvl = ilvl or 0,
+        equipLoc = equipLoc or "",
+        boss = "Manuelt",
+      })
+    end
+    if #items == 0 then
+      NLC.Utils.Print("Usage: /nordlc add [shift-click items here]")
       return
     end
-    local _, _, _, ilvl, _, _, _, _, equipLoc = C_Item.GetItemInfo(itemLink)
-    local itemId = C_Item.GetItemInfoInstant(itemLink)
-    NLC.Council.StartSession(itemLink, itemId or 0, ilvl or 0, equipLoc or "", "Manuelt")
+    NLC.Council.StartMultiSession(items, "Manuelt")
     return
 
   elseif cmd == "activate" then
@@ -290,6 +235,53 @@ SlashCmdList["NORDLC"] = function(msg)
   elseif cmd == "reset" then
     NLC.db.instanceChoices = {}
     NLC.Utils.Print("Instance choices reset. You will be prompted again.")
+  elseif cmd == "version" then
+    if not IsInRaid() then
+      NLC.Utils.Print("NordavindLC v" .. NLC.version)
+      return
+    end
+    NLC.Utils.Print("Checking addon versions in raid...")
+    NLC.versionCheckResults = {}
+    -- Add own version
+    local myName = UnitName("player")
+    NLC.versionCheckResults[myName] = NLC.version
+    NLC.Comms.Send("VERSION_CHECK", "")
+    -- Collect replies for 3 seconds then show results
+    C_Timer.After(3, function()
+      local raidCount = GetNumGroupMembers()
+      local results = NLC.versionCheckResults or {}
+      local hasAddon, outdated, noAddon = {}, {}, {}
+      for i = 1, raidCount do
+        local name = GetRaidRosterInfo(i)
+        if name then
+          name = name:match("^([^-]+)") or name
+          local ver = results[name]
+          if ver then
+            if ver == NLC.version then
+              table.insert(hasAddon, "|cff00ff00" .. name .. "|r (v" .. ver .. ")")
+            else
+              table.insert(outdated, "|cffff8800" .. name .. "|r (v" .. ver .. " — outdated!)")
+            end
+          else
+            table.insert(noAddon, "|cff888888" .. name .. "|r")
+          end
+        end
+      end
+      NLC.Utils.Print("--- Version Check ---")
+      if #hasAddon > 0 then
+        NLC.Utils.Print("|cff00ff00Current:|r " .. table.concat(hasAddon, ", "))
+      end
+      if #outdated > 0 then
+        NLC.Utils.Print("|cffff8800Outdated:|r " .. table.concat(outdated, ", "))
+      end
+      if #noAddon > 0 then
+        NLC.Utils.Print("|cff888888No addon:|r " .. table.concat(noAddon, ", "))
+      end
+      NLC.Utils.Print(string.format("Total: %d/%d have addon", #hasAddon + #outdated, raidCount))
+      NLC.versionCheckResults = nil
+    end)
+    return
+
   elseif cmd == "status" then
     NLC.Utils.Print(NLC.active and "Active" or "Inactive")
     NLC.Utils.Print("Officer: " .. (NLC.isOfficer and "Yes" or "No"))

@@ -34,8 +34,11 @@ local function shouldTrackItem(itemLink, itemID)
 
   local _, _, quality, ilvl, _, itemType, itemSubType, _, equipLoc = C_Item.GetItemInfo(itemLink)
 
+  -- Item not cached yet — return nil to signal retry
+  if not quality then return nil end
+
   -- Must be epic+
-  if not quality or quality < 4 then return false end
+  if quality < 4 then return false end
 
   -- Recipes always pass through (leader decides)
   if itemType == "Recipe" then return true, ilvl or 0, equipLoc or "" end
@@ -84,21 +87,29 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
 
   elseif event == "ENCOUNTER_LOOT_RECEIVED" then
     local encounterID, itemID, itemLink, quantity, playerName, className = ...
-    local track, ilvl, equipLoc = shouldTrackItem(itemLink, itemID)
-    if track then
-      table.insert(droppedItems, {
-        itemLink = itemLink,
-        itemId = itemID,
-        ilvl = ilvl or 0,
-        equipLoc = equipLoc,
-        boss = currentBoss,
-        looter = playerName,
-      })
+    local function tryTrack(retries)
+      local track, ilvl, equipLoc = shouldTrackItem(itemLink, itemID)
+      if track == nil and retries > 0 then
+        -- Item not cached yet, retry after a short delay
+        C_Timer.After(0.5, function() tryTrack(retries - 1) end)
+        return
+      end
+      if track then
+        table.insert(droppedItems, {
+          itemLink = itemLink,
+          itemId = itemID,
+          ilvl = ilvl or 0,
+          equipLoc = equipLoc,
+          boss = currentBoss,
+          looter = playerName,
+        })
 
-      if NLC.isOfficer then
-        NLC.UI.ShowLootDetected(droppedItems)
+        if NLC.isOfficer then
+          NLC.UI.ShowLootDetected(droppedItems)
+        end
       end
     end
+    tryTrack(5)
   end
 end)
 
