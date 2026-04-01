@@ -104,14 +104,21 @@ function NLC.CreateMinimapButton()
   minimapBtn:RegisterForDrag("LeftButton")
 
   local icon = minimapBtn:CreateTexture(nil, "ARTWORK")
-  icon:SetSize(20, 20)
+  icon:SetSize(26, 26)
   icon:SetPoint("CENTER")
   icon:SetTexture("Interface\\AddOns\\NordavindLC\\logo")
   minimapBtn.icon = icon
 
+  -- Circular mask so the icon blends with the minimap
+  local mask = minimapBtn:CreateMaskTexture()
+  mask:SetSize(26, 26)
+  mask:SetPoint("CENTER")
+  mask:SetTexture("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
+  icon:AddMaskTexture(mask)
+
   local border = minimapBtn:CreateTexture(nil, "OVERLAY")
-  border:SetSize(54, 54)
-  border:SetPoint("CENTER")
+  border:SetSize(52, 52)
+  border:SetPoint("CENTER", 0, 0)
   border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
   minimapBtn.border = border
 
