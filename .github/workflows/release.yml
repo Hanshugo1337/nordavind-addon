@@ -29,20 +29,28 @@ jobs:
           files: NordavindLC-${{ steps.version.outputs.version }}.zip
           generate_release_notes: true
 
+      - name: Get release notes
+        id: notes
+        run: |
+          gh release view "${{ steps.version.outputs.version }}" --json body -q .body > release_notes.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload to CurseForge
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
         run: |
-          # Build metadata JSON
-          cat > metadata.json << 'META'
-          {
-            "changelog": "See https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}",
-            "changelogType": "text",
-            "displayName": "NordavindLC ${{ steps.version.outputs.version }}",
-            "gameVersions": [14422],
-            "releaseType": "release"
-          }
-          META
+          CHANGELOG=$(cat release_notes.md)
+          jq -n \
+            --arg changelog "$CHANGELOG" \
+            --arg name "NordavindLC ${{ steps.version.outputs.version }}" \
+            '{
+              changelog: $changelog,
+              changelogType: "markdown",
+              displayName: $name,
+              gameVersions: [14422],
+              releaseType: "release"
+            }' > metadata.json
 
           curl -s -X POST \
             "https://wow.curseforge.com/api/projects/1499638/upload-file" \
