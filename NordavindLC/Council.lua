@@ -349,7 +349,7 @@ end
 
 function NLC.Council.ResumeAll()
   if #NLC.pendingSessions == 0 then
-    NLC.Utils.Print("No pending items.")
+    NLC.Utils.Print("Ingen ufordelte items.")
     return
   end
 

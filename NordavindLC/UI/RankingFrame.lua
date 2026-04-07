@@ -387,7 +387,7 @@ function NLC.UI.ShowWizard(sessions, index)
   -- "No interest" skip button if no candidates
   if #ranked == 0 then
     if not rankFrame.skipBtn then
-      rankFrame.skipBtn = T.CreateButton(rankFrame, 200, 40, T.MUTED .. "No interest — Skip|r")
+      rankFrame.skipBtn = T.CreateButton(rankFrame, 200, 40, T.MUTED .. "Ingen interesse — Hopp over|r")
       rankFrame.skipBtn:SetPoint("CENTER", 0, 0)
     end
     rankFrame.skipBtn:SetScript("OnClick", function()

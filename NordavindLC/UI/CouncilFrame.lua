@@ -109,7 +109,7 @@ local function createItemRow(parent, index, item)
   if #categories == 0 then
     local noUse = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     noUse:SetPoint("TOPLEFT", 12, -52)
-    noUse:SetText(T.MUTED .. "Not usable by your class|r")
+    noUse:SetText(T.MUTED .. "Ikke brukbart for din klasse|r")
     itemRows[item.sessionIdx] = rowData
     return row
   end
@@ -314,7 +314,7 @@ local function refreshLootPanel(items)
   if count == 0 then
     local empty = lootPanel.content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     empty:SetPoint("CENTER", 0, 0)
-    empty:SetText(T.MUTED .. "No items remaining|r")
+    empty:SetText(T.MUTED .. "Ingen items igjen|r")
     empty:Show()
     lootPanel.startBtn:Disable()
     lootPanel.countText:SetText("")

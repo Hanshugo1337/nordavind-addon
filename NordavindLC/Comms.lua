@@ -41,9 +41,9 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
     return
   end
 
-  -- Non-leader asking if leader is active — respond with ACTIVATE
+  -- Someone asking if addon is active — anyone who is active responds
   if msgType == "ACTIVATE_CHECK" then
-    if NLC.active and UnitIsGroupLeader("player") then
+    if NLC.active then
       NLC.Comms.Send("ACTIVATE", "")
     end
     return

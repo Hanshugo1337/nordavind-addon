@@ -48,17 +48,27 @@ frame:SetScript("OnEvent", function(self, event, arg1)
       C_Timer.After(2, function()
         if IsInRaid() and not NLC.active then
           if UnitIsGroupLeader("player") then
-            -- Only leader gets the activation prompt (every time)
+            -- Only leader gets the activation prompt
             NLC.UI.ShowActivationPrompt()
           else
-            -- Non-leader: ask if leader has addon active
+            -- Raider: check if anyone in raid has addon active
             NLC.Comms.Send("ACTIVATE_CHECK", "")
           end
         end
       end)
     end
+    -- Deactivate when leaving raid
+    if not IsInRaid() and NLC.active then
+      NLC.Deactivate()
+      NLC.Utils.Print("Deaktivert (forlot raid).")
+    end
 
   elseif event == "GROUP_ROSTER_UPDATE" then
+    -- Deactivate when no longer in raid
+    if not IsInRaid() and NLC.active then
+      NLC.Deactivate()
+      NLC.Utils.Print("Deaktivert (forlot raid).")
+    end
     -- Leader re-broadcasts ACTIVATE when roster changes (new players joining)
     if NLC.active and IsInRaid() and UnitIsGroupLeader("player") then
       NLC.Comms.Send("ACTIVATE", "")
