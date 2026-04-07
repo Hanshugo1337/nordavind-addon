@@ -257,7 +257,7 @@ function NLC.Council.Award(playerName)
   end
 
   NLC.Comms.Send("AWARD", { sessionIdx = session.sessionIdx, itemLink = session.itemLink, playerName = playerName, category = category })
-  NLC.RecordAward(session.itemLink, playerName, UnitName("player"), session.boss, category)
+  NLC.RecordAward(session.itemLink, playerName, UnitName("player"), session.boss, category, session.itemId)
   NLC.Utils.Print(session.itemLink .. " awarded to " .. playerName .. " (" .. category .. ")")
 
   local imported = NLC.Scoring.GetImportedScore(playerName)

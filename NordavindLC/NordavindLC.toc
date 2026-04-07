@@ -2,7 +2,7 @@
 ## Title: NordavindLC
 ## Notes: Nordavind Guild Loot Council
 ## Author: Nordavind
-## Version: 1.4.0
+## Version: 1.5.0
 ## X-Website: https://github.com/Hanshugo1337/nordavind-addon
 ## X-Curse-Project-ID: 1499638
 ## SavedVariables: NordavindLC_DB, NordavindLC_Import
@@ -30,3 +30,4 @@ UI/Theme.lua
 UI/ActivationPrompt.lua
 UI/CouncilFrame.lua
 UI/RankingFrame.lua
+UI/TradeFrame.lua

@@ -29,7 +29,9 @@ frame:SetScript("OnEvent", function(self, event, arg1)
       lootHistory = {},
       config = { officers = {}, timer = 90 },
       pendingExport = {},
+      pendingTrades = {},
     }
+    NordavindLC_DB.pendingTrades = NordavindLC_DB.pendingTrades or {}
     NLC.db = NordavindLC_DB
 
     if NordavindLC_Import and NordavindLC_Import.players then
@@ -46,19 +48,8 @@ frame:SetScript("OnEvent", function(self, event, arg1)
       C_Timer.After(2, function()
         if IsInRaid() and not NLC.active then
           if UnitIsGroupLeader("player") then
-            -- Only leader gets the activation prompt
-            local _, _, _, _, _, _, _, instanceMapID = GetInstanceInfo()
-            local key = tostring(instanceMapID or 0)
-            NLC.db.instanceChoices = NLC.db.instanceChoices or {}
-            local choice = NLC.db.instanceChoices[key]
-            if choice == "yes" then
-              NLC.Activate()
-              NLC.Comms.Send("ACTIVATE", "")
-            elseif choice == "no" then
-              -- Already declined for this instance, don't ask again
-            else
-              NLC.UI.ShowActivationPrompt(key)
-            end
+            -- Only leader gets the activation prompt (every time)
+            NLC.UI.ShowActivationPrompt()
           else
             -- Non-leader: ask if leader has addon active
             NLC.Comms.Send("ACTIVATE_CHECK", "")
@@ -151,7 +142,7 @@ function NLC.Deactivate()
   NLC.Utils.Print("Deactivated.")
 end
 
-function NLC.RecordAward(item, awardedTo, awardedBy, boss, category)
+function NLC.RecordAward(item, awardedTo, awardedBy, boss, category, itemId)
   local entry = {
     item = item,
     awardedTo = awardedTo,
@@ -162,6 +153,10 @@ function NLC.RecordAward(item, awardedTo, awardedBy, boss, category)
   }
   table.insert(NLC.db.lootHistory, entry)
   table.insert(NLC.db.pendingExport, entry)
+
+  -- Add to pending trades
+  local id = itemId or C_Item.GetItemInfoInstant(item)
+  NLC.Trade.Add(item, id, awardedTo, awardedBy, boss, category)
 end
 
 SLASH_NORDLC1 = "/nordlc"
@@ -225,6 +220,9 @@ SlashCmdList["NORDLC"] = function(msg)
         NLC.Utils.Print("Usage: /nordlc resume <number> or /nordlc resume all")
       end
     end
+  elseif cmd == "trade" then
+    NLC.UI.ShowTradeFrame()
+
   elseif cmd == "import" then
     if NordavindLC_Import and NordavindLC_Import.players then
       NLC.db.importData = NordavindLC_Import
@@ -233,8 +231,8 @@ SlashCmdList["NORDLC"] = function(msg)
       NLC.Utils.Print("No import data found. Run the companion app first.")
     end
   elseif cmd == "reset" then
-    NLC.db.instanceChoices = {}
-    NLC.Utils.Print("Instance choices reset. You will be prompted again.")
+    NLC.db.pendingTrades = {}
+    NLC.Utils.Print("Pending trades cleared.")
   elseif cmd == "version" then
     if not IsInRaid() then
       NLC.Utils.Print("NordavindLC v" .. NLC.version)
@@ -283,11 +281,12 @@ SlashCmdList["NORDLC"] = function(msg)
     return
 
   elseif cmd == "status" then
-    NLC.Utils.Print(NLC.active and "Active" or "Inactive")
-    NLC.Utils.Print("Officer: " .. (NLC.isOfficer and "Yes" or "No"))
-    NLC.Utils.Print("Import: " .. NLC.Utils.TableCount(NLC.db.importData.players or {}) .. " players")
-    NLC.Utils.Print("Pending: " .. #NLC.pendingSessions .. " items")
-    NLC.Utils.Print("Export queue: " .. #(NLC.db.pendingExport or {}) .. " awards")
+    NLC.Utils.Print(NLC.active and "Aktiv" or "Inaktiv")
+    NLC.Utils.Print("Officer: " .. (NLC.isOfficer and "Ja" or "Nei"))
+    NLC.Utils.Print("Import: " .. NLC.Utils.TableCount(NLC.db.importData.players or {}) .. " spillere")
+    NLC.Utils.Print("Ufordelt: " .. #NLC.pendingSessions .. " items")
+    NLC.Utils.Print("Pending trades: " .. #(NLC.db.pendingTrades or {}) .. " items")
+    NLC.Utils.Print("Export: " .. #(NLC.db.pendingExport or {}) .. " awards")
   elseif cmd == "test" then
     NLC.isOfficer = true
     NLC.active = true
@@ -381,17 +380,16 @@ SlashCmdList["NORDLC"] = function(msg)
 
   else
     NLC.Utils.Print("Commands:")
-    NLC.Utils.Print("  /nordlc activate — Activate addon")
-    NLC.Utils.Print("  /nordlc deactivate — Deactivate addon")
-    NLC.Utils.Print("  /nordlc add [item] — Start council for an item (shift-click)")
-    NLC.Utils.Print("  /nordlc pending — Show pending items")
-    NLC.Utils.Print("  /nordlc resume <nr> — Resume pending item")
-    NLC.Utils.Print("  /nordlc resume all — Resume all pending in wizard")
-    NLC.Utils.Print("  /nordlc import — Load import data")
-    NLC.Utils.Print("  /nordlc reset — Reset instance choices")
-    NLC.Utils.Print("  /nordlc test — Test wizard with mock data")
-    NLC.Utils.Print("  /nordlc testend — End test mode")
-    NLC.Utils.Print("  /nordlc status — Show status")
+    NLC.Utils.Print("  /nordlc activate — Aktiver addon")
+    NLC.Utils.Print("  /nordlc deactivate — Deaktiver addon")
+    NLC.Utils.Print("  /nordlc add [item] — Start council (shift-klikk items)")
+    NLC.Utils.Print("  /nordlc trade — Vis items som venter på trade")
+    NLC.Utils.Print("  /nordlc pending — Vis ufordelte items")
+    NLC.Utils.Print("  /nordlc resume <nr> — Gjenoppta ufordelt item")
+    NLC.Utils.Print("  /nordlc resume all — Gjenoppta alle")
+    NLC.Utils.Print("  /nordlc import — Last inn import data")
+    NLC.Utils.Print("  /nordlc reset — Nullstill pending trades")
+    NLC.Utils.Print("  /nordlc status — Vis status")
   end
 end
 

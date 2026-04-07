@@ -12,6 +12,7 @@ local CATEGORY_TIPS = {
   catalyst = "Du vil bruke Catalyst for å gjøre dette\ntil tier-set piece.",
   offspec  = "Du trenger dette for off spec\n(annen rolle enn main).",
   tmog     = "Du vil ha dette itemet for transmog\n(utseende).",
+  pass     = "Du trenger ikke dette itemet.",
 }
 
 local function AddItemTooltip(frame, itemLink)
@@ -91,15 +92,17 @@ local function createItemRow(parent, index, item)
 
   local available = NLC.Utils.GetAvailableCategories(item.itemLink, item.equipLoc)
   local allCategories = {
-    { id = "upgrade",  label = T.GOLD_LIGHT .. "Upgrade|r", width = 110 },
-    { id = "catalyst", label = "|cff9933ffCatalyst|r",      width = 95 },
-    { id = "offspec",  label = "|cff3399ffOffspec|r",       width = 95 },
-    { id = "tmog",     label = T.GOLD .. "Tmog|r",          width = 80 },
+    { id = "upgrade",  label = T.GOLD_LIGHT .. "Upgrade|r", width = 100 },
+    { id = "catalyst", label = "|cff9933ffCatalyst|r",      width = 90 },
+    { id = "offspec",  label = "|cff3399ffOffspec|r",       width = 85 },
+    { id = "tmog",     label = T.GOLD .. "Tmog|r",          width = 70 },
   }
   local categories = {}
   for _, cat in ipairs(allCategories) do
     if available[cat.id] then table.insert(categories, cat) end
   end
+  -- Always add Pass button at the end
+  table.insert(categories, { id = "pass", label = T.RED .. "Pass|r", width = 65 })
 
   local rowData = { buttons = {}, noteBox = nil, selection = nil, noteText = "" }
 
@@ -120,17 +123,27 @@ local function createItemRow(parent, index, item)
     btn:SetText(cat.label)
 
     btn:SetScript("OnClick", function()
-      if rowData.selection == cat.id then
+      if cat.id == "pass" then
+        -- Pass: deselect everything
+        rowData.selection = nil
+        for _, b in pairs(rowData.buttons) do b:SetAlpha(1.0) end
+        btn:SetAlpha(1.0)
+        if rowData.noteBox then rowData.noteBox:Hide() end
+      elseif rowData.selection == cat.id then
+        -- Clicking same button: deselect (back to no selection)
         rowData.selection = nil
         for _, b in pairs(rowData.buttons) do b:SetAlpha(1.0) end
         if cat.id == "upgrade" and rowData.noteBox then
           rowData.noteBox:Hide()
         end
       else
+        -- Select this category
         rowData.selection = cat.id
         for id, b in pairs(rowData.buttons) do
           b:SetAlpha(id == cat.id and 1.0 or 0.4)
         end
+        -- Dim the pass button too
+        if rowData.buttons["pass"] then rowData.buttons["pass"]:SetAlpha(0.4) end
         if cat.id == "upgrade" and rowData.noteBox then
           rowData.noteBox:Show()
           rowData.noteBox:SetFocus()
