@@ -1,8 +1,10 @@
 {
   "name": "nordavind-companion",
-  "version": "1.0.0",
-  "description": "Bridge between NordavindLC WoW addon and nordavind-web API",
+  "version": "2.0.0",
+  "description": "NordavindLC Companion — localhost dashboard for loot council scoring",
   "main": "index.js",
-  "bin": { "nordavind-companion": "./index.js" },
-  "scripts": { "start": "node index.js" }
+  "scripts": { "start": "node index.js" },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
 }

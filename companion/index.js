@@ -6,8 +6,10 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 const fs = require("fs");
 const path = require("path");
+const express = require("express");
 const { ApiClient } = require("./lib/api-client");
 const { SavedVarsWatcher } = require("./lib/watcher");
+const { exec } = require("child_process");
 
 // Load .env
 const envPath = path.join(__dirname, ".env");
@@ -18,10 +20,11 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-const WEB_URL = process.env.NORDAVIND_WEB_URL || "https://nordavind.no";
+const WEB_URL = process.env.NORDAVIND_WEB_URL || "https://nordavind.cc";
 const API_KEY = process.env.ADDON_API_KEY;
 const WOW_PATH = process.env.WOW_INSTALL_PATH;
 const ACCOUNT = process.env.WOW_ACCOUNT_NAME;
+const PORT = 3333;
 
 if (!API_KEY || !WOW_PATH || !ACCOUNT) {
   console.error("Missing required env vars. Copy .env.example to .env and fill in values.");
@@ -30,76 +33,144 @@ if (!API_KEY || !WOW_PATH || !ACCOUNT) {
 
 const api = new ApiClient(WEB_URL, API_KEY);
 const watcher = new SavedVarsWatcher(WOW_PATH, ACCOUNT);
+const app = express();
 
-const command = process.argv[2] || "watch";
+app.use(express.static(path.join(__dirname, "public")));
 
-async function importScoring() {
-  console.log("Fetching scoring data from", WEB_URL, "...");
-  const data = await api.exportScoring();
-  const playerCount = Object.keys(data.players || {}).length;
-  console.log(`Got ${playerCount} players, generated at ${data.generatedAt}`);
+// ---- State ----
+let lastScores = null;
+let lastSyncTime = null;
+let lastError = null;
+let syncCount = 0;
 
-  watcher.writeImportData(data);
-  console.log("Written to SavedVariables. Type /reload in WoW to load the data.");
+// ---- API routes for the dashboard ----
+
+app.get("/api/status", (req, res) => {
+  res.json({
+    connected: !!lastScores,
+    lastSync: lastSyncTime,
+    lastError,
+    syncCount,
+    wowPath: WOW_PATH,
+    account: ACCOUNT,
+    webUrl: WEB_URL,
+    playerCount: lastScores ? Object.keys(lastScores.players || {}).length : 0,
+  });
+});
+
+app.get("/api/scores", (req, res) => {
+  if (!lastScores) return res.json({ players: {}, generatedAt: null });
+  res.json(lastScores);
+});
+
+app.get("/api/loot", (req, res) => {
+  try {
+    const vars = watcher.read();
+    const db = vars?.NordavindLC_DB;
+    const history = db?.lootHistory || [];
+    // Return last 50 entries, newest first
+    const recent = Array.isArray(history) ? history.slice(-50).reverse() : [];
+    res.json(recent);
+  } catch {
+    res.json([]);
+  }
+});
+
+app.get("/api/trades", (req, res) => {
+  try {
+    const vars = watcher.read();
+    const db = vars?.NordavindLC_DB;
+    const trades = db?.pendingTrades || [];
+    res.json(Array.isArray(trades) ? trades : []);
+  } catch {
+    res.json([]);
+  }
+});
+
+app.post("/api/sync", async (req, res) => {
+  try {
+    await fetchAndWriteScores();
+    res.json({ ok: true, lastSync: lastSyncTime });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+app.post("/api/recalc", async (req, res) => {
+  try {
+    const mode = req.query.mode || "full";
+    const secret = process.env.CRON_SECRET || "nordavind-cron-2026";
+    const calcRes = await fetch(`${WEB_URL}/api/scores/calculate?mode=${mode}`, {
+      method: "POST",
+      headers: { "x-cron-secret": secret },
+      signal: AbortSignal.timeout(60000),
+    });
+    const result = await calcRes.json();
+    if (!calcRes.ok) throw new Error(result.error || "Calculation failed");
+    // Re-fetch updated scores
+    await fetchAndWriteScores();
+    res.json({ ok: true, ...result, lastSync: lastSyncTime });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+// ---- Core sync logic ----
+
+async function fetchAndWriteScores() {
+  try {
+    const data = await api.exportScoring();
+    lastScores = data;
+    lastSyncTime = new Date().toISOString();
+    lastError = null;
+    syncCount++;
+
+    watcher.writeImportData(data);
+    console.log(`[sync] Scores updated: ${Object.keys(data.players || {}).length} players (${lastSyncTime})`);
+  } catch (err) {
+    lastError = err.message;
+    console.error("[sync] Failed:", err.message);
+    throw err;
+  }
 }
 
 async function processExports() {
-  const awards = watcher.checkPendingExports();
-  for (const award of awards) {
-    try {
-      const result = await api.awardLoot(award);
-      console.log(`  Synced: ${award.item} -> ${award.awardedTo} (id: ${result.lootDropId})`);
-    } catch (err) {
-      console.error(`  Failed to sync: ${award.item} ->`, err.message);
-    }
-  }
-  return awards.length;
-}
-
-async function watch() {
-  console.log("NordavindLC Companion — watching for changes...");
-  console.log(`  WoW: ${WOW_PATH}`);
-  console.log(`  Account: ${ACCOUNT}`);
-  console.log(`  API: ${WEB_URL}`);
-
-  if (!watcher.exists()) {
-    console.log("\nSavedVariables file not found yet. It will be created after your first /reload with the addon loaded.");
-  }
-
-  // Auto-import on startup
   try {
-    await importScoring();
-  } catch (err) {
-    console.error("Auto-import failed:", err.message);
-  }
-
-  console.log("\nWatching for loot awards... (Ctrl+C to stop)");
-  setInterval(async () => {
-    try {
-      const count = await processExports();
-      if (count > 0) console.log(`Processed ${count} award(s)`);
-    } catch (err) {
-      console.error("Watch error:", err.message);
+    const awards = watcher.checkPendingExports();
+    for (const award of awards) {
+      try {
+        await api.awardLoot(award);
+        console.log(`[export] Synced: ${award.item} -> ${award.awardedTo}`);
+      } catch (err) {
+        console.error(`[export] Failed: ${award.item} ->`, err.message);
+      }
     }
-  }, 5000);
+  } catch { /* file not found yet */ }
 }
 
-async function main() {
-  switch (command) {
-    case "import":
-      await importScoring();
-      break;
-    case "watch":
-      await watch();
-      break;
-    default:
-      console.log("Usage: nordavind-companion [import|watch]");
-      console.log("  import  — fetch scoring data and write to SavedVariables");
-      console.log("  watch   — auto-import + watch for loot awards (default)");
+// ---- Startup ----
+
+app.listen(PORT, async () => {
+  console.log(`NordavindLC Companion running at http://localhost:${PORT}`);
+
+  // Auto-open in browser
+  const url = `http://localhost:${PORT}`;
+  try {
+    exec(`start "" "${url}"`, (err) => { if (err) console.log("Open browser manually:", url); });
+  } catch { console.log("Open browser manually:", url); }
+
+  // Initial sync
+  try {
+    await fetchAndWriteScores();
+  } catch (err) {
+    console.error("Initial sync failed:", err.message);
   }
-}
 
-main().catch(err => {
-  console.error("Fatal:", err.message);
-  process.exit(1);
+  // Watch for loot exports every 5 seconds
+  setInterval(() => processExports(), 5000);
+
+  // Re-fetch scores every 10 minutes
+  setInterval(async () => {
+    try { await fetchAndWriteScores(); } catch { /* logged in function */ }
+  }, 10 * 60 * 1000);
 });
