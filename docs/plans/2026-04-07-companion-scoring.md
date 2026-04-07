@@ -737,6 +737,25 @@ app.post("/api/sync", async (req, res) => {
   }
 });
 
+app.post("/api/recalc", async (req, res) => {
+  try {
+    const mode = req.query.mode || "full";
+    const secret = process.env.CRON_SECRET || "nordavind-cron-2026";
+    const calcRes = await fetch(`${WEB_URL}/api/scores/calculate?mode=${mode}`, {
+      method: "POST",
+      headers: { "x-cron-secret": secret },
+      signal: AbortSignal.timeout(60000),
+    });
+    const result = await calcRes.json();
+    if (!calcRes.ok) throw new Error(result.error || "Calculation failed");
+    // Re-fetch updated scores
+    await fetchAndWriteScores();
+    res.json({ ok: true, ...result, lastSync: lastSyncTime });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
 // ---- Core sync logic ----
 
 async function fetchAndWriteScores() {
@@ -930,6 +949,7 @@ tr:hover td { background: #1a1a2e; }
       </div>
       <br>
       <button class="btn" onclick="manualSync()">Synkroniser nå</button>
+      <button class="btn" onclick="fullRecalc()" style="margin-left:8px;background:#5b9bd5">Full beregning (raid night)</button>
     </div>
   </div>
 
@@ -1053,6 +1073,25 @@ async function manualSync() {
   await loadSync();
   btn.textContent = "Synkroniser nå";
   btn.disabled = false;
+}
+
+async function fullRecalc() {
+  const btns = document.querySelectorAll(".btn");
+  btns.forEach(b => b.disabled = true);
+  btns[1].textContent = "Beregner scores...";
+  const res = await fetch("/api/recalc?mode=full", { method: "POST" });
+  const data = await res.json();
+  if (data.ok) {
+    btns[1].textContent = "Ferdig! (" + (data.count || 0) + " spillere)";
+  } else {
+    btns[1].textContent = "Feilet: " + (data.error || "ukjent");
+  }
+  await loadPlayers();
+  await loadSync();
+  setTimeout(() => {
+    btns[1].textContent = "Full beregning (raid night)";
+    btns.forEach(b => b.disabled = false);
+  }, 3000);
 }
 
 // ---- Status bar ----
