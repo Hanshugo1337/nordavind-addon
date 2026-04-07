@@ -41,9 +41,21 @@ PlayerScore {
 - Returns same format as before (`{ players: { ... }, generatedAt }`)
 - Falls back to live calculation if no scores exist yet
 
+**Two calculation modes:**
+
+`POST /api/scores/calculate?mode=full` (pre-raid, 20:25):
+- WCL parses, Raider.IO M+, attendance, Discord ranks, deaths/defensives, loot
+- Everything from scratch
+
+`POST /api/scores/calculate?mode=live` (during raid, every 10 min):
+- WCL parses (updates after each boss kill)
+- Deaths/defensives (updates per fight)
+- Loot penalties (updates when items are awarded)
+- Keeps Raider.IO, attendance, Discord ranks from the full calculation
+
 **Cron schedule (external, via VPS crontab or systemd timer):**
-- Monday + Wednesday: 20:25 CET → first calculation
-- Monday + Wednesday: 20:30–23:00 CET → every 10 minutes
+- Monday + Wednesday 20:25 CET → `mode=full`
+- Monday + Wednesday 20:30–23:00 CET every 10 min → `mode=live`
 - Calls `POST /api/scores/calculate` with cron secret
 
 ### Part 2: Companion App (localhost web dashboard)
