@@ -214,13 +214,10 @@ function NLC.Council.BuildRanking(session)
     local score, breakdown = NLC.Scoring.Calculate(imported, live)
     local warnings = NLC.Scoring.GetWarnings(imported)
 
-    -- Tmog: use random roll instead of score
+    -- Tmog: random roll 0-100 (generated fresh each ranking)
     local roll = nil
     if interest.category == "tmog" then
-      if not interest.tmogRoll then
-        interest.tmogRoll = math.random(1, 100)
-      end
-      roll = interest.tmogRoll
+      roll = math.random(0, 100)
     end
 
     table.insert(candidates, {

@@ -48,11 +48,19 @@ frame:SetScript("OnEvent", function(self, event, arg1)
       C_Timer.After(2, function()
         if IsInRaid() and not NLC.active then
           if UnitIsGroupLeader("player") then
-            -- Only leader gets the activation prompt
             NLC.UI.ShowActivationPrompt()
           else
-            -- Raider: check if anyone in raid has addon active
+            -- Raider: poll for activation every 5s until activated (max 60s)
             NLC.Comms.Send("ACTIVATE_CHECK", "")
+            if NLC._activateTicker then NLC._activateTicker:Cancel() end
+            NLC._activateTicker = C_Timer.NewTicker(5, function(ticker)
+              if NLC.active or not IsInRaid() then
+                ticker:Cancel()
+                NLC._activateTicker = nil
+                return
+              end
+              NLC.Comms.Send("ACTIVATE_CHECK", "")
+            end, 12)
           end
         end
       end)
