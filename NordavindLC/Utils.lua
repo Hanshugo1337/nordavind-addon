@@ -75,24 +75,14 @@ end
 function NLC.Utils.GetTierCount()
   local tierSlots = { 1, 3, 5, 10, 7 } -- head, shoulder, chest, hands, legs
   local count = 0
-  if not NLC.Utils._scanTip then
-    NLC.Utils._scanTip = CreateFrame("GameTooltip", "NordavindLCScanTip", nil, "GameTooltipTemplate")
-    NLC.Utils._scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
-  end
-  local tip = NLC.Utils._scanTip
   for _, slot in ipairs(tierSlots) do
-    local link = GetInventoryItemLink("player", slot)
-    if link then
-      tip:ClearLines()
-      tip:SetInventoryItem("player", slot)
-      for i = 1, tip:NumLines() do
-        local textObj = _G["NordavindLCScanTipTextLeft" .. i]
-        if textObj then
-          local line = textObj:GetText() or ""
-          if line:find("%(%d/%d%)") or line:find("Set:") then
-            count = count + 1
-            break
-          end
+    local tooltipData = C_TooltipInfo.GetInventoryItem("player", slot)
+    if tooltipData and tooltipData.lines then
+      for _, line in ipairs(tooltipData.lines) do
+        local text = line.leftText or ""
+        if text:find("%(%d/%d%)") or text:find("Set:") or text:find("Set Bonus") then
+          count = count + 1
+          break
         end
       end
     end
@@ -102,20 +92,12 @@ end
 
 function NLC.Utils.IsWarbound(itemLink)
   if not itemLink then return false end
-  if not NLC.Utils._scanTip then
-    NLC.Utils._scanTip = CreateFrame("GameTooltip", "NordavindLCScanTip", nil, "GameTooltipTemplate")
-    NLC.Utils._scanTip:SetOwner(WorldFrame, "ANCHOR_NONE")
-  end
-  local tip = NLC.Utils._scanTip
-  tip:ClearLines()
-  tip:SetHyperlink(itemLink)
-  for i = 1, tip:NumLines() do
-    local textObj = _G["NordavindLCScanTipTextLeft" .. i]
-    if textObj then
-      local line = textObj:GetText() or ""
-      if line:find("Warbound") or line:find("Account Bound") then
-        return true
-      end
+  local tooltipData = C_TooltipInfo.GetItemByHyperlink(itemLink)
+  if not tooltipData or not tooltipData.lines then return false end
+  for _, line in ipairs(tooltipData.lines) do
+    local text = line.leftText or ""
+    if text:find("Warbound") or text:find("Account Bound") then
+      return true
     end
   end
   return false
@@ -178,6 +160,15 @@ function NLC.Utils.GetAvailableCategories(itemLink, equipLoc)
   end
 
   return result
+end
+
+function NLC.Utils.DeepCopy(orig)
+  if type(orig) ~= "table" then return orig end
+  local copy = {}
+  for k, v in pairs(orig) do
+    copy[k] = NLC.Utils.DeepCopy(v)
+  end
+  return copy
 end
 
 function NLC.Utils.TableCount(t)

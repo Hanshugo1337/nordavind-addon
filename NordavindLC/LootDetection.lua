@@ -54,6 +54,9 @@ local function shouldTrackItem(itemLink, itemID)
   -- Skip cosmetic/decor slots
   if equipLoc == "INVTYPE_BODY" or equipLoc == "INVTYPE_TABARD" then return false end
 
+  -- Skip warbound/account-bound items (can't be traded)
+  if NLC.Utils.IsWarbound(itemLink) then return false end
+
   return true, ilvl or 0, equipLoc or ""
 end
 
@@ -72,20 +75,20 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
 
     local link = GetLootRollItemLink(rollID)
 
-    -- Auto-pass for non-officers (council handles distribution)
-    if not NLC.isOfficer then
-      local shouldPass = true
-      if link then
-        local _, _, _, _, _, itemType = C_Item.GetItemInfo(link)
-        if itemType == "Miscellaneous" or itemType == "Companion Pets" then
-          shouldPass = false
-        end
+    -- Auto-pass for all addon users (council handles distribution)
+    local shouldPass = true
+    if link then
+      local _, _, _, _, _, itemType = C_Item.GetItemInfo(link)
+      if itemType == "Miscellaneous" or itemType == "Companion Pets" then
+        shouldPass = false
       end
-      if shouldPass then
-        RollOnLoot(rollID, 0) -- 0 = Pass
-      end
-      return
     end
+    if shouldPass then
+      RollOnLoot(rollID, 0) -- 0 = Pass
+    end
+
+    -- Non-officers don't need loot detection panel
+    if not NLC.isOfficer then return end
 
     -- Officer: detect item for loot panel
     if not link then return end

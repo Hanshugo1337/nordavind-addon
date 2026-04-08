@@ -4,6 +4,21 @@
 local NLC = NordavindLC_NS
 local T = NLC.Theme
 
+StaticPopupDialogs["NORDLC_CONFIRM_AWARD"] = {
+  text = "Tildel %s til %s?",
+  button1 = "Ja",
+  button2 = "Nei",
+  OnAccept = function(self)
+    if self.data and self.data.name then
+      NLC.Council.Award(self.data.name)
+    end
+  end,
+  timeout = 0,
+  whileDead = true,
+  hideOnEscape = true,
+  preferredIndex = 3,
+}
+
 local rankFrame = nil
 local RANK_COLORS = {
   raider = { r = 0.2, g = 0.8, b = 0.2 },
@@ -121,7 +136,7 @@ function NLC.UI.ShowRanking(session, candidates)
 
   -- Update title with item link
   rankFrame.title:SetText(T.GOLD .. "Loot Council|r  " .. T.MUTED .. "—|r  " .. (session.itemLink or "?"))
-  rankFrame.laterBtn:SetShown(NLC.isOfficer)
+  rankFrame.laterBtn:SetShown(NLC.isOfficer and UnitIsGroupLeader("player"))
 
   -- Clear previous rows
   for _, child in ipairs({ rankFrame.scrollChild:GetChildren() }) do
@@ -220,10 +235,14 @@ function NLC.UI.ShowRanking(session, candidates)
     end)
     nameHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Score (gold, prominent) with breakdown tooltip
+    -- Score or Roll (gold, prominent)
     local scoreText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     scoreText:SetPoint("LEFT", COL.score, 0)
-    scoreText:SetText(T.GOLD_LIGHT .. string.format("%.1f", c.score) .. "|r")
+    if c.roll then
+      scoreText:SetText(T.GOLD_LIGHT .. "Roll: " .. c.roll .. "|r")
+    else
+      scoreText:SetText(T.GOLD_LIGHT .. string.format("%.1f", c.score) .. "|r")
+    end
 
     local scoreHover = CreateFrame("Frame", nil, row)
     scoreHover:SetSize(80, ROW_HEIGHT)
@@ -231,14 +250,19 @@ function NLC.UI.ShowRanking(session, candidates)
     scoreHover:EnableMouse(true)
     scoreHover:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:AddLine("Score Breakdown", 1, 0.82, 0)
-      if c.breakdown then
-        for _, line in ipairs(c.breakdown) do
-          GameTooltip:AddDoubleLine(line.label or "", string.format("%.1f", line.value or 0), 0.6, 0.6, 0.6, 1, 1, 1)
+      if c.roll then
+        GameTooltip:AddLine("Tmog Roll", 1, 0.82, 0)
+        GameTooltip:AddDoubleLine("Roll", tostring(c.roll), 0.6, 0.6, 0.6, 1, 1, 1)
+      else
+        GameTooltip:AddLine("Score Breakdown", 1, 0.82, 0)
+        if c.breakdown then
+          for _, line in ipairs(c.breakdown) do
+            GameTooltip:AddDoubleLine(line.label or "", string.format("%.1f", line.value or 0), 0.6, 0.6, 0.6, 1, 1, 1)
+          end
         end
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddDoubleLine("Total", string.format("%.1f", c.score or 0), 1, 0.82, 0, 0.2, 1, 0.2)
       end
-      GameTooltip:AddLine(" ")
-      GameTooltip:AddDoubleLine("Total", string.format("%.1f", c.score or 0), 1, 0.82, 0, 0.2, 1, 0.2)
       GameTooltip:Show()
     end)
     scoreHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -293,13 +317,15 @@ function NLC.UI.ShowRanking(session, candidates)
       warnText:SetText(T.ORANGE .. table.concat(c.warnings, "\n") .. "|r")
     end
 
-    -- Award button (officer only)
-    if NLC.isOfficer then
+    -- Award button (raid leader only) with confirmation dialog
+    if NLC.isOfficer and UnitIsGroupLeader("player") then
       local awardBtn = T.CreateButton(row, 80, 30, "Tildel")
       awardBtn:SetPoint("RIGHT", COL.award, 0)
       awardBtn:SetScript("OnClick", function()
-        NLC.Council.Award(c.name)
-        -- Don't hide rankFrame here — wizard AdvanceWizard handles it
+        local dialog = StaticPopup_Show("NORDLC_CONFIRM_AWARD", session.itemLink or "?", c.name)
+        if dialog then
+          dialog.data = { name = c.name }
+        end
       end)
     end
 

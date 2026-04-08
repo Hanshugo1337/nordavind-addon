@@ -35,7 +35,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
     NLC.db = NordavindLC_DB
 
     if NordavindLC_Import and NordavindLC_Import.players then
-      NLC.db.importData = NordavindLC_Import
+      NLC.db.importData = NLC.Utils.DeepCopy(NordavindLC_Import)
       NLC.Utils.Print("Import data loaded (" .. NLC.Utils.TableCount(NLC.db.importData.players) .. " players)")
     end
 
@@ -76,10 +76,8 @@ frame:SetScript("OnEvent", function(self, event, arg1)
 
   elseif event == "PLAYER_LOGOUT" then
     NordavindLC_DB = NLC.db
-    -- Preserve import data so companion app's writes survive logout
-    if NLC.db.importData and NLC.db.importData.players and next(NLC.db.importData.players) then
-      NordavindLC_Import = NLC.db.importData
-    end
+    -- NordavindLC_Import is managed solely by the companion app
+    -- Don't write back in-session modifications (lootThisWeek etc)
   end
 end)
 
@@ -235,7 +233,7 @@ SlashCmdList["NORDLC"] = function(msg)
 
   elseif cmd == "import" then
     if NordavindLC_Import and NordavindLC_Import.players then
-      NLC.db.importData = NordavindLC_Import
+      NLC.db.importData = NLC.Utils.DeepCopy(NordavindLC_Import)
       NLC.Utils.Print("Import updated: " .. NLC.Utils.TableCount(NLC.db.importData.players) .. " players")
     else
       NLC.Utils.Print("No import data found. Run the companion app first.")
@@ -335,8 +333,8 @@ SlashCmdList["NORDLC"] = function(msg)
       { name = "Testwarrior",  class = "WARRIOR",  cat = "upgrade",  tier = 3 },
       { name = "Testshaman",   class = "SHAMAN",   cat = "upgrade",  tier = 3 },
       { name = "Testpaladin",  class = "PALADIN",  cat = "catalyst", tier = 1 },
-      { name = "Testmage",     class = "MAGE",     cat = "catalyst", tier = 1 },
-      { name = "Testrogue",    class = "ROGUE",    cat = "upgrade",  tier = 2 },
+      { name = "Testmage",     class = "MAGE",     cat = "tmog",     tier = 1 },
+      { name = "Testrogue",    class = "ROGUE",    cat = "tmog",     tier = 2 },
     }
 
     for _, item in ipairs(fakeItems) do

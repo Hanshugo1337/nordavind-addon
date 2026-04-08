@@ -214,13 +214,23 @@ function NLC.Council.BuildRanking(session)
     local score, breakdown = NLC.Scoring.Calculate(imported, live)
     local warnings = NLC.Scoring.GetWarnings(imported)
 
+    -- Tmog: use random roll instead of score
+    local roll = nil
+    if interest.category == "tmog" then
+      if not interest.tmogRoll then
+        interest.tmogRoll = math.random(1, 100)
+      end
+      roll = interest.tmogRoll
+    end
+
     table.insert(candidates, {
       name = name,
       class = interest.class,
       category = interest.category,
       note = interest.note,
-      score = score,
-      breakdown = breakdown,
+      score = roll or score,
+      roll = roll,
+      breakdown = (not roll) and breakdown or nil,
       warnings = warnings,
       rank = imported and imported.rank or "trial",
       equippedIlvl = interest.equippedIlvl,
@@ -240,7 +250,7 @@ function NLC.Council.BuildRanking(session)
 end
 
 function NLC.Council.Award(playerName)
-  if not NLC.isOfficer or #activeSessions == 0 then return end
+  if not NLC.isOfficer or not UnitIsGroupLeader("player") or #activeSessions == 0 then return end
 
   local session = activeSessions[currentWizardIndex]
   if not session then return end
