@@ -44,7 +44,7 @@ function NLC.Scoring.Calculate(imported, live)
   return score, breakdown
 end
 
-function NLC.Scoring.GetWarnings(imported)
+function NLC.Scoring.GetWarnings(imported, playerName)
   local warnings = {}
   if not imported then
     table.insert(warnings, "No web data")
@@ -59,8 +59,11 @@ function NLC.Scoring.GetWarnings(imported)
   if imported.defensives and imported.defensives < 0.8 then
     table.insert(warnings, string.format("Low defensives: %.1f/fight", imported.defensives))
   end
-  if imported.lootThisWeek and imported.lootThisWeek > 0 then
-    table.insert(warnings, string.format("%d loot this week", imported.lootThisWeek))
+  -- Use persisted weekly count instead of ephemeral importData field
+  local weeklyCount = NLC.db.weeklyLoot and NLC.db.weeklyLoot.counts and
+    NLC.db.weeklyLoot.counts[playerName] or imported.lootThisWeek or 0
+  if weeklyCount > 0 then
+    table.insert(warnings, string.format("%d loot denne uka", weeklyCount))
   end
   if imported.rank == "trial" then
     table.insert(warnings, "Trial")

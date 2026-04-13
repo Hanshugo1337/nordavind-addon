@@ -30,8 +30,10 @@ frame:SetScript("OnEvent", function(self, event, arg1)
       config = { officers = {}, timer = 90 },
       pendingExport = {},
       pendingTrades = {},
+      weeklyLoot = { resetTimestamp = 0, counts = {} },
     }
     NordavindLC_DB.pendingTrades = NordavindLC_DB.pendingTrades or {}
+    NordavindLC_DB.weeklyLoot = NordavindLC_DB.weeklyLoot or { resetTimestamp = 0, counts = {} }
     NLC.db = NordavindLC_DB
 
     if NordavindLC_Import and NordavindLC_Import.players then
@@ -70,6 +72,13 @@ frame:SetScript("OnEvent", function(self, event, arg1)
       NLC.Deactivate()
       NLC.Utils.Print("Deaktivert (forlot raid).")
     end
+    -- Weekly loot reset check (Wednesday 09:00 UTC)
+    local lastReset = GetLastWednesdayResetUTC()
+    if NLC.db.weeklyLoot.resetTimestamp < lastReset then
+      NLC.db.weeklyLoot.counts = {}
+      NLC.db.weeklyLoot.resetTimestamp = lastReset
+      NLC.Utils.Print("Ukentlig loot-teller nullstilt.")
+    end
 
   elseif event == "GROUP_ROSTER_UPDATE" then
     -- Deactivate when no longer in raid
@@ -88,6 +97,16 @@ frame:SetScript("OnEvent", function(self, event, arg1)
     -- Don't write back in-session modifications (lootThisWeek etc)
   end
 end)
+
+local function GetLastWednesdayResetUTC()
+  -- Epoch (Jan 1 1970) was Thursday. First Wednesday = Jan 7 1970 = day 6.
+  -- EU WoW reset = Wednesday 09:00 UTC
+  local FIRST_RESET = 6 * 86400 + 9 * 3600  -- 550800
+  local WEEK = 7 * 86400
+  local now = time()
+  local weeksSince = math.floor((now - FIRST_RESET) / WEEK)
+  return FIRST_RESET + weeksSince * WEEK
+end
 
 function NLC.CheckOfficer()
   -- Raid leader always gets officer access

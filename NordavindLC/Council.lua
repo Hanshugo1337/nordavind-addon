@@ -216,7 +216,7 @@ function NLC.Council.BuildRanking(session)
     }
 
     local score, breakdown = NLC.Scoring.Calculate(imported, live)
-    local warnings = NLC.Scoring.GetWarnings(imported)
+    local warnings = NLC.Scoring.GetWarnings(imported, name)
 
     -- Tmog: random roll 0-100 (generated fresh each ranking)
     local roll = nil
@@ -275,11 +275,9 @@ function NLC.Council.Award(playerName)
   NLC.RecordAward(session.itemLink, playerName, UnitName("player"), session.boss, category, session.itemId)
   NLC.Utils.Print(session.itemLink .. " awarded to " .. playerName .. " (" .. category .. ")")
 
-  local imported = NLC.Scoring.GetImportedScore(playerName)
-  if imported then
-    imported.lootThisWeek = (imported.lootThisWeek or 0) + 1
-    imported.baseScore = (imported.baseScore or 0) - 15
-  end
+  -- Track weekly loot count in SavedVariables (resets each Wednesday)
+  NLC.db.weeklyLoot = NLC.db.weeklyLoot or { resetTimestamp = 0, counts = {} }
+  NLC.db.weeklyLoot.counts[playerName] = (NLC.db.weeklyLoot.counts[playerName] or 0) + 1
 
   if IsInRaid() then
     local chatType = (UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")) and "RAID_WARNING" or "RAID"
