@@ -90,7 +90,7 @@ local function createItemRow(parent, index, item)
     eqText:SetText(T.MUTED .. "Ingen item i slot|r")
   end
 
-  local available = NLC.Utils.GetAvailableCategories(item.itemLink, item.equipLoc)
+  local available = NLC.Utils.GetAvailableCategories(item.itemLink, item.equipLoc, item.itemId)
   local allCategories = {
     { id = "upgrade",  label = T.GOLD_LIGHT .. "Upgrade|r", width = 100 },
     { id = "catalyst", label = "|cff9933ffCatalyst|r",      width = 90 },

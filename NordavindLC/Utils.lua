@@ -116,7 +116,7 @@ local TIER_SLOTS = { INVTYPE_HEAD = true, INVTYPE_SHOULDER = true, INVTYPE_CHEST
 local JEWELRY_SLOTS = { INVTYPE_FINGER = true, INVTYPE_TRINKET = true, INVTYPE_NECK = true, INVTYPE_CLOAK = true }
 local WEAPON_SLOTS = { INVTYPE_WEAPON = true, INVTYPE_2HWEAPON = true, INVTYPE_WEAPONMAINHAND = true, INVTYPE_WEAPONOFFHAND = true, INVTYPE_HOLDABLE = true, INVTYPE_SHIELD = true, INVTYPE_RANGED = true }
 
-function NLC.Utils.GetAvailableCategories(itemLink, equipLoc)
+function NLC.Utils.GetAvailableCategories(itemLink, equipLoc, itemId)
   local result = { upgrade = false, catalyst = false, offspec = false, tmog = true }
   if not itemLink then return result end
 
@@ -166,6 +166,23 @@ function NLC.Utils.GetAvailableCategories(itemLink, equipLoc)
     -- Fallback: item is equippable but classID didn't match (e.g. API change or token items)
     result.upgrade = true
     result.offspec = true
+  end
+
+  -- Wishlist filter: if upgrade would be available, check if this item is on the player's wishlist.
+  -- If import data exists but the item is NOT wishlisted, disable upgrade.
+  if result.upgrade and itemId then
+    local playerName = UnitName("player")
+    local imported = NLC.db and NLC.db.importData and NLC.db.importData.players and
+                     NLC.db.importData.players[playerName]
+    if imported and imported.wishlist and #imported.wishlist > 0 then
+      local wishlisted = false
+      for _, wid in ipairs(imported.wishlist) do
+        if wid == itemId then wishlisted = true; break end
+      end
+      if not wishlisted then
+        result.upgrade = false
+      end
+    end
   end
 
   return result

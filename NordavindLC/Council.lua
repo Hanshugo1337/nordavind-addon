@@ -220,6 +220,21 @@ function NLC.Council.BuildRanking(session)
     local score, breakdown = NLC.Scoring.Calculate(imported, live)
     local warnings = NLC.Scoring.GetWarnings(imported, name)
 
+    -- Wishlist safety filter: skip "upgrade" candidates if item not on their wishlist
+    -- (front-end also hides the button, but this handles stale import data edge cases)
+    local skipCandidate = false
+    if interest.category == "upgrade" and session.itemId then
+      if imported and imported.wishlist and #imported.wishlist > 0 then
+        local wishlisted = false
+        for _, wid in ipairs(imported.wishlist) do
+          if wid == session.itemId then wishlisted = true; break end
+        end
+        if not wishlisted then skipCandidate = true end
+      end
+    end
+
+    if not skipCandidate then
+
     -- Tmog: random roll 0-100 (generated fresh each ranking)
     local roll = nil
     if interest.category == "tmog" then
@@ -244,6 +259,7 @@ function NLC.Council.BuildRanking(session)
       tierCount = interest.tierCount,
       ilvlDiff = (session.ilvl or 0) - (interest.equippedIlvl or 0),
     })
+    end -- if not skipCandidate
   end
 
   table.sort(candidates, function(a, b)
