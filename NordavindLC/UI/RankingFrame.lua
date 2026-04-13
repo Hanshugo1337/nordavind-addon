@@ -201,6 +201,12 @@ function NLC.UI.ShowRanking(session, candidates)
     nameText:SetPoint("LEFT", COL.name, 0)
     nameText:SetText(NLC.Utils.ClassColoredName(c.name, c.class))
 
+    -- Role label (small, color-coded)
+    local roleColors = { dps = "|cffff4444", tank = "|cff4488ff", healer = "|cff44ff88" }
+    local roleLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    roleLabel:SetPoint("LEFT", COL.name, -16)
+    roleLabel:SetText((roleColors[c.role] or "|cffffffff") .. (c.role or "dps") .. "|r")
+
     -- Player tooltip hover area
     local nameHover = CreateFrame("Frame", nil, row)
     nameHover:SetSize(160, ROW_HEIGHT)

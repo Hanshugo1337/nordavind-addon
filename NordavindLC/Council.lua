@@ -220,6 +220,8 @@ function NLC.Council.BuildRanking(session)
       roll = math.random(0, 100)
     end
 
+    local role = imported and imported.role or "dps"
+
     table.insert(candidates, {
       name = name,
       class = interest.class,
@@ -230,6 +232,7 @@ function NLC.Council.BuildRanking(session)
       breakdown = (not roll) and breakdown or nil,
       warnings = warnings,
       rank = imported and imported.rank or "trial",
+      role = role,
       equippedIlvl = interest.equippedIlvl,
       tierCount = interest.tierCount,
       ilvlDiff = (session.ilvl or 0) - (interest.equippedIlvl or 0),
@@ -237,9 +240,14 @@ function NLC.Council.BuildRanking(session)
   end
 
   local catOrder = { upgrade = 1, catalyst = 2, offspec = 3, tmog = 4 }
+  -- roleTier: dps always above tank/healer within same category
+  local roleTier = { dps = 1, tank = 2, healer = 2 }
+
   table.sort(candidates, function(a, b)
     local ca, cb = catOrder[a.category] or 99, catOrder[b.category] or 99
     if ca ~= cb then return ca < cb end
+    local ra, rb = roleTier[a.role] or 2, roleTier[b.role] or 2
+    if ra ~= rb then return ra < rb end
     return a.score > b.score
   end)
 
