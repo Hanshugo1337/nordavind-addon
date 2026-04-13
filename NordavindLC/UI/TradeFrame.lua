@@ -210,12 +210,26 @@ local function refreshTradeFrame()
       InitiateTradeWith(entry.awardedTo, entry.itemId)
     end)
 
+    -- Endre button — edit recipient / category
+    local editBtn = T.CreateButton(row, 70, 32, T.GOLD .. "Endre|r")
+    editBtn:SetPoint("RIGHT", -96, 0)
+    local capturedEntry = entry
+    local capturedIdx   = i
+    editBtn:SetScript("OnClick", function()
+      NLC.UI.ShowEditPopup(capturedEntry, function(newRecipient, newCategory)
+        NLC.History.ApplyAwardEdit(capturedEntry, newRecipient, newCategory)
+        capturedEntry.awardedTo = newRecipient
+        capturedEntry.category  = newCategory
+        refreshTradeFrame()
+      end)
+    end)
+
     -- Remove button (X) — manually mark as done
     local removeBtn = CreateFrame("Button", nil, row, "UIPanelCloseButtonNoScripts")
     removeBtn:SetSize(22, 22)
-    removeBtn:SetPoint("RIGHT", -96, 0)
+    removeBtn:SetPoint("RIGHT", -172, 0)
     removeBtn:SetScript("OnClick", function()
-      NLC.Trade.Remove(i)
+      NLC.Trade.Remove(capturedIdx)
       refreshTradeFrame()
     end)
   end

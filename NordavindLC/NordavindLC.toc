@@ -31,3 +31,4 @@ UI/ActivationPrompt.lua
 UI/CouncilFrame.lua
 UI/RankingFrame.lua
 UI/TradeFrame.lua
+UI/HistoryFrame.lua

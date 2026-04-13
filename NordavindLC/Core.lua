@@ -14,6 +14,16 @@ NLC.db = {}
 NLC.importData = {}
 NLC.pendingSessions = {}
 
+local function GetLastWednesdayResetUTC()
+  -- Epoch (Jan 1 1970) was Thursday. First Wednesday = Jan 7 1970 = day 6.
+  -- EU WoW reset = Wednesday 09:00 UTC
+  local FIRST_RESET = 6 * 86400 + 9 * 3600  -- 550800
+  local WEEK = 7 * 86400
+  local now = time()
+  local weeksSince = math.floor((now - FIRST_RESET) / WEEK)
+  return FIRST_RESET + weeksSince * WEEK
+end
+
 -- Initialize
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
@@ -30,10 +40,12 @@ frame:SetScript("OnEvent", function(self, event, arg1)
       config = { officers = {}, timer = 90 },
       pendingExport = {},
       pendingTrades = {},
+      pendingEdits = {},
       weeklyLoot = { resetTimestamp = 0, counts = {} },
     }
     NordavindLC_DB.pendingTrades = NordavindLC_DB.pendingTrades or {}
-    NordavindLC_DB.weeklyLoot = NordavindLC_DB.weeklyLoot or { resetTimestamp = 0, counts = {} }
+    NordavindLC_DB.pendingEdits  = NordavindLC_DB.pendingEdits  or {}
+    NordavindLC_DB.weeklyLoot    = NordavindLC_DB.weeklyLoot    or { resetTimestamp = 0, counts = {} }
     NLC.db = NordavindLC_DB
 
     if NordavindLC_Import and NordavindLC_Import.players then
@@ -98,15 +110,6 @@ frame:SetScript("OnEvent", function(self, event, arg1)
   end
 end)
 
-local function GetLastWednesdayResetUTC()
-  -- Epoch (Jan 1 1970) was Thursday. First Wednesday = Jan 7 1970 = day 6.
-  -- EU WoW reset = Wednesday 09:00 UTC
-  local FIRST_RESET = 6 * 86400 + 9 * 3600  -- 550800
-  local WEEK = 7 * 86400
-  local now = time()
-  local weeksSince = math.floor((now - FIRST_RESET) / WEEK)
-  return FIRST_RESET + weeksSince * WEEK
-end
 
 function NLC.CheckOfficer()
   -- Raid leader always gets officer access
@@ -257,6 +260,8 @@ SlashCmdList["NORDLC"] = function(msg)
         NLC.Utils.Print("Usage: /nordlc resume <number> or /nordlc resume all")
       end
     end
+  elseif cmd == "history" then
+    NLC.UI.ShowHistoryFrame()
   elseif cmd == "trade" then
     NLC.UI.ShowTradeFrame()
 
@@ -420,7 +425,8 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.Utils.Print("  /nordlc activate — Aktiver addon")
     NLC.Utils.Print("  /nordlc deactivate — Deaktiver addon")
     NLC.Utils.Print("  /nordlc add [item] — Start council (shift-klikk items)")
-    NLC.Utils.Print("  /nordlc trade — Vis items som venter på trade")
+    NLC.Utils.Print("  /nordlc history — Vis award historikk")
+  NLC.Utils.Print("  /nordlc trade — Vis items som venter på trade")
     NLC.Utils.Print("  /nordlc pending — Vis ufordelte items")
     NLC.Utils.Print("  /nordlc resume <nr> — Gjenoppta ufordelt item")
     NLC.Utils.Print("  /nordlc resume all — Gjenoppta alle")
