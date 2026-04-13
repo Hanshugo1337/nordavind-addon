@@ -75,16 +75,19 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
 
     local link = GetLootRollItemLink(rollID)
 
-    -- Auto-pass for all addon users (council handles distribution)
-    local shouldPass = true
-    if link then
-      local _, _, _, _, _, itemType = C_Item.GetItemInfo(link)
-      if itemType == "Miscellaneous" or itemType == "Companion Pets" then
-        shouldPass = false
+    -- Leader doesn't auto-pass — receives loot and trades it to the awarded player
+    -- Everyone else (including officers) auto-passes so the council controls distribution
+    if not UnitIsGroupLeader("player") then
+      local shouldPass = true
+      if link then
+        local _, _, _, _, _, itemType = C_Item.GetItemInfo(link)
+        if itemType == "Miscellaneous" or itemType == "Companion Pets" then
+          shouldPass = false
+        end
       end
-    end
-    if shouldPass then
-      RollOnLoot(rollID, 0) -- 0 = Pass
+      if shouldPass then
+        RollOnLoot(rollID, 0) -- 0 = Pass
+      end
     end
 
     -- Non-officers don't need loot detection panel

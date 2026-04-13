@@ -90,6 +90,8 @@ frame:SetScript("OnEvent", function(self, event, arg1)
 end)
 
 function NLC.CheckOfficer()
+  -- Raid leader always gets officer access
+  if UnitIsGroupLeader("player") then NLC.isOfficer = true; return true end
   local name = UnitName("player")
   for _, officer in ipairs(NLC.db.config.officers or {}) do
     if officer == name then NLC.isOfficer = true; return true end

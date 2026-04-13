@@ -146,10 +146,15 @@ function NLC.Utils.GetAvailableCategories(itemLink, equipLoc)
   end
 
   -- Armor — check armor type via GetItemInfoInstant (synchronous)
-  local _, _, _, _, _, classID, subclassID = C_Item.GetItemInfoInstant(itemLink)
-  if classID == 4 then -- Armor
-    local armorType = ARMOR_SUBCLASS[subclassID]
-    if armorType and armorType == myArmor then
+  -- Returns: itemID, itemType(str), itemSubType(str), equipLoc, icon, classID(num), subclassID(num)
+  local itemID, itemTypeStr, itemSubTypeStr, _, _, classID, subclassID = C_Item.GetItemInfoInstant(itemLink)
+
+  -- Try numeric classID first (classID 4 = Armor)
+  local isArmor = (classID == 4) or (itemTypeStr == "Armor")
+  local armorSubType = ARMOR_SUBCLASS[subclassID] or itemSubTypeStr
+
+  if isArmor then
+    if armorSubType and armorSubType == myArmor then
       -- Primary armor type — full options
       result.upgrade = true
       result.offspec = true
@@ -157,6 +162,10 @@ function NLC.Utils.GetAvailableCategories(itemLink, equipLoc)
         result.catalyst = true
       end
     end
+  elseif IsEquippableItem(itemLink) then
+    -- Fallback: item is equippable but classID didn't match (e.g. API change or token items)
+    result.upgrade = true
+    result.offspec = true
   end
 
   return result
