@@ -75,7 +75,7 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
   elseif msgType == "INTEREST" then
     for _, entry in ipairs(data) do
       if NLC.Council.OnInterestReceived then
-        NLC.Council.OnInterestReceived(sender, entry.sessionIdx, entry.category, entry.eqIlvl, entry.tierCount, entry.note)
+        NLC.Council.OnInterestReceived(sender, entry.sessionIdx, entry.category, entry.eqIlvl, entry.tierCount, entry.note, entry.eqLink)
       end
     end
 

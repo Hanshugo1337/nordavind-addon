@@ -129,7 +129,9 @@ end
 -- AddonCompartment (minimap addon menu) handlers
 function NordavindLC_OnAddonCompartmentClick(_, button)
   if button == "LeftButton" then
-    if #NLC.pendingSessions > 0 then
+    if NLC.Council.ReopenWizard and NLC.Council.ReopenWizard() then
+      -- reopened active council
+    elseif #NLC.pendingSessions > 0 then
       SlashCmdList["NORDLC"]("pending")
     else
       SlashCmdList["NORDLC"]("status")
@@ -155,7 +157,7 @@ function NordavindLC_OnAddonCompartmentEnter(_, menuButtonFrame)
     GameTooltip:AddLine(pending .. " pending items", 1, 0.8, 0)
   end
   GameTooltip:AddLine(" ")
-  GameTooltip:AddLine("Left-click: Status / Pending", 0.6, 0.6, 0.6)
+  GameTooltip:AddLine("Left-click: Status / Gjenåpne council", 0.6, 0.6, 0.6)
   GameTooltip:AddLine("Right-click: Activate/Deactivate", 0.6, 0.6, 0.6)
   GameTooltip:Show()
 end
@@ -259,6 +261,10 @@ SlashCmdList["NORDLC"] = function(msg)
       else
         NLC.Utils.Print("Usage: /nordlc resume <number> or /nordlc resume all")
       end
+    end
+  elseif cmd == "council" then
+    if not NLC.Council.ReopenWizard() then
+      NLC.Utils.Print("Ingen aktiv council å gjenåpne.")
     end
   elseif cmd == "history" then
     NLC.UI.ShowHistoryFrame()
@@ -425,7 +431,8 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.Utils.Print("  /nordlc activate — Aktiver addon")
     NLC.Utils.Print("  /nordlc deactivate — Deaktiver addon")
     NLC.Utils.Print("  /nordlc add [item] — Start council (shift-klikk items)")
-    NLC.Utils.Print("  /nordlc history — Vis award historikk")
+    NLC.Utils.Print("  /nordlc council — Gjenåpne aktivt loot council vindu")
+  NLC.Utils.Print("  /nordlc history — Vis award historikk")
   NLC.Utils.Print("  /nordlc trade — Vis items som venter på trade")
     NLC.Utils.Print("  /nordlc pending — Vis ufordelte items")
     NLC.Utils.Print("  /nordlc resume <nr> — Gjenoppta ufordelt item")

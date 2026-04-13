@@ -12,6 +12,7 @@ class SavedVarsWatcher {
     );
     this.lastMtime = 0;
     this.lastExportCount = 0;
+    this.lastEditCount = 0;
   }
 
   exists() {
@@ -42,6 +43,22 @@ class SavedVarsWatcher {
     const newAwards = pending.slice(this.lastExportCount);
     this.lastExportCount = pending.length;
     return newAwards;
+  }
+
+  checkPendingEdits() {
+    const stat = fs.statSync(this.svPath, { throwIfNoEntry: false });
+    if (!stat) return [];
+
+    const vars = this.read();
+    const db = vars?.NordavindLC_DB;
+    if (!db?.pendingEdits) return [];
+
+    const edits = Array.isArray(db.pendingEdits) ? db.pendingEdits : Object.values(db.pendingEdits);
+    if (edits.length <= this.lastEditCount) return [];
+
+    const newEdits = edits.slice(this.lastEditCount);
+    this.lastEditCount = edits.length;
+    return newEdits;
   }
 
   writeImportData(scoringData) {

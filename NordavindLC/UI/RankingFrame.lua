@@ -284,12 +284,25 @@ function NLC.UI.ShowRanking(session, candidates)
     ilvlHover:SetPoint("LEFT", COL.ilvl, 0)
     ilvlHover:EnableMouse(true)
     ilvlHover:SetScript("OnEnter", function(self)
-      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:AddLine("Item Level", 1, 0.82, 0)
-      GameTooltip:AddDoubleLine("Equipped", tostring(c.equippedIlvl or "?"), 0.6, 0.6, 0.6, 1, 1, 1)
-      GameTooltip:AddDoubleLine("This item", tostring(session.ilvl or "?"), 0.6, 0.6, 0.6, 1, 1, 1)
-      GameTooltip:AddDoubleLine("Difference", (c.ilvlDiff and c.ilvlDiff > 0 and "+" or "") .. tostring(c.ilvlDiff or 0), 0.6, 0.6, 0.6, c.ilvlDiff and c.ilvlDiff > 0 and 0.2 or 1, c.ilvlDiff and c.ilvlDiff > 0 and 1 or 0.3, c.ilvlDiff and c.ilvlDiff > 0 and 0.2 or 0.3)
-      GameTooltip:Show()
+      if c.equippedLink then
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetHyperlink(c.equippedLink)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddDoubleLine("This item", tostring(session.ilvl or "?"), 0.6, 0.6, 0.6, 1, 1, 1)
+        local diff = c.ilvlDiff or 0
+        local dr, dg = diff > 0 and 0.2 or 1, diff > 0 and 1 or 0.3
+        GameTooltip:AddDoubleLine("Difference", (diff > 0 and "+" or "") .. diff, 0.6, 0.6, 0.6, dr, dg, 0.2)
+        GameTooltip:Show()
+      else
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Item Level", 1, 0.82, 0)
+        GameTooltip:AddDoubleLine("Equipped", tostring(c.equippedIlvl or "?"), 0.6, 0.6, 0.6, 1, 1, 1)
+        GameTooltip:AddDoubleLine("This item", tostring(session.ilvl or "?"), 0.6, 0.6, 0.6, 1, 1, 1)
+        local diff = c.ilvlDiff or 0
+        local dr, dg = diff > 0 and 0.2 or 1, diff > 0 and 1 or 0.3
+        GameTooltip:AddDoubleLine("Difference", (diff > 0 and "+" or "") .. diff, 0.6, 0.6, 0.6, dr, dg, 0.2)
+        GameTooltip:Show()
+      end
     end)
     ilvlHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
 

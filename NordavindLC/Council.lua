@@ -112,6 +112,7 @@ function NLC.Council.SubmitResponses(selections)
         sessionIdx = session.sessionIdx,
         category = sel.category,
         eqIlvl = eqIlvl or 0,
+        eqLink = eqLink or "",
         tierCount = tierCount,
         note = sel.note or "",
       })
@@ -124,7 +125,7 @@ function NLC.Council.SubmitResponses(selections)
   NLC.Utils.Print("Responses sent for " .. #responses .. " item(s)")
 end
 
-function NLC.Council.OnInterestReceived(sender, sessionIdx, category, eqIlvl, tierCount, note)
+function NLC.Council.OnInterestReceived(sender, sessionIdx, category, eqIlvl, tierCount, note, eqLink)
   if not NLC.isOfficer then return end
 
   local session = nil
@@ -139,6 +140,7 @@ function NLC.Council.OnInterestReceived(sender, sessionIdx, category, eqIlvl, ti
   session.interests[name] = {
     category = category,
     equippedIlvl = eqIlvl,
+    equippedLink = (eqLink and eqLink ~= "") and eqLink or nil,
     tierCount = tierCount,
     class = class or "WARRIOR",
     note = (note and note ~= "") and note or nil,
@@ -238,6 +240,7 @@ function NLC.Council.BuildRanking(session)
       rank = imported and imported.rank or "trial",
       role = role,
       equippedIlvl = interest.equippedIlvl,
+      equippedLink = interest.equippedLink,
       tierCount = interest.tierCount,
       ilvlDiff = (session.ilvl or 0) - (interest.equippedIlvl or 0),
     })
@@ -313,6 +316,18 @@ function NLC.Council.AdvanceWizard()
   NLC.Utils.Print("All items awarded!")
   NLC.UI.HideWizard()
   activeSessions = {}
+end
+
+function NLC.Council.ReopenWizard()
+  -- Find the first ranking-phase session and reopen the wizard
+  for i, s in ipairs(activeSessions) do
+    if s.phase == "ranking" then
+      currentWizardIndex = i
+      NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
+      return true
+    end
+  end
+  return false
 end
 
 function NLC.Council.AwardLaterCurrent()

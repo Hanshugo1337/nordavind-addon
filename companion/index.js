@@ -148,6 +148,20 @@ async function processExports() {
   } catch { /* file not found yet */ }
 }
 
+async function processEdits() {
+  try {
+    const edits = watcher.checkPendingEdits();
+    for (const edit of edits) {
+      try {
+        await api.editAward(edit);
+        console.log(`[edit] Synced: ${edit.item} -> ${edit.newAwardedTo} (${edit.newCategory})`);
+      } catch (err) {
+        console.error(`[edit] Failed: ${edit.item} ->`, err.message);
+      }
+    }
+  } catch { /* file not found yet */ }
+}
+
 // ---- Startup ----
 
 app.listen(PORT, async () => {
@@ -166,8 +180,8 @@ app.listen(PORT, async () => {
     console.error("Initial sync failed:", err.message);
   }
 
-  // Watch for loot exports every 5 seconds
-  setInterval(() => processExports(), 5000);
+  // Watch for loot exports and edits every 5 seconds
+  setInterval(() => { processExports(); processEdits(); }, 5000);
 
   // Re-fetch scores every 10 minutes
   setInterval(async () => {
