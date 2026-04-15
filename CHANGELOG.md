@@ -1,5 +1,12 @@
 # NordavindLC Changelog
 
+## 1.7.2 (2026-04-15)
+
+### Bug Fixes
+
+- **Tmog teller ikke som loot denne uken** — tmog-awards øker ikke lenger den ukentlige loot-telleren
+- **Ukentlig teller resettes riktig på onsdager** — etter onsdag-reset falt telleren tilbake til gammel importdata; nå brukes alltid in-game tellingen når en reset er registrert
+
 ## 1.7.1 (2026-04-15)
 
 ### Bug Fixes

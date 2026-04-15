@@ -59,9 +59,16 @@ function NLC.Scoring.GetWarnings(imported, playerName)
   if imported.defensives and imported.defensives < 0.8 then
     table.insert(warnings, string.format("Low defensives: %.1f/fight", imported.defensives))
   end
-  -- Use persisted weekly count instead of ephemeral importData field
-  local weeklyCount = NLC.db.weeklyLoot and NLC.db.weeklyLoot.counts and
-    NLC.db.weeklyLoot.counts[playerName] or imported.lootThisWeek or 0
+  -- Use in-game tracker once a reset has been recorded; otherwise fall back to import data.
+  -- (After Wednesday reset, counts[playerName] is nil — without this guard Lua would
+  --  fall through the `or` chain to imported.lootThisWeek from the previous week's import.)
+  local wl = NLC.db.weeklyLoot
+  local weeklyCount
+  if wl and wl.resetTimestamp and wl.resetTimestamp > 0 then
+    weeklyCount = (wl.counts and wl.counts[playerName]) or 0
+  else
+    weeklyCount = imported.lootThisWeek or 0
+  end
   if weeklyCount > 0 then
     table.insert(warnings, string.format("%d loot denne uka", weeklyCount))
   end

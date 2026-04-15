@@ -295,8 +295,11 @@ function NLC.Council.Award(playerName)
   NLC.Utils.Print(session.itemLink .. " awarded to " .. playerName .. " (" .. category .. ")")
 
   -- Track weekly loot count in SavedVariables (resets each Wednesday)
-  NLC.db.weeklyLoot = NLC.db.weeklyLoot or { resetTimestamp = 0, counts = {} }
-  NLC.db.weeklyLoot.counts[playerName] = (NLC.db.weeklyLoot.counts[playerName] or 0) + 1
+  -- Tmog does not count as real loot
+  if category ~= "tmog" then
+    NLC.db.weeklyLoot = NLC.db.weeklyLoot or { resetTimestamp = 0, counts = {} }
+    NLC.db.weeklyLoot.counts[playerName] = (NLC.db.weeklyLoot.counts[playerName] or 0) + 1
+  end
 
   if IsInRaid() then
     local chatType = (UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")) and "RAID_WARNING" or "RAID"
