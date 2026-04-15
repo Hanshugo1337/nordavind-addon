@@ -160,12 +160,18 @@ function NLC.Utils.GetAvailableCategories(itemLink, equipLoc, itemId)
       result.offspec = true
       if TIER_SLOTS[equipLoc] then
         result.catalyst = true
+        result.tmog = false  -- tier pieces should never be used for tmog
       end
     end
   elseif IsEquippableItem(itemLink) then
-    -- Fallback: item is equippable but classID didn't match (e.g. API change or token items)
+    -- Fallback: item is equippable but classID didn't match (e.g. API change, token items,
+    -- or item not yet cached on raider's client when SESSION_START arrived)
     result.upgrade = true
     result.offspec = true
+    if TIER_SLOTS[equipLoc] then
+      result.catalyst = true
+      result.tmog = false  -- tier slot — hide tmog even when armor type is unknown
+    end
   end
 
   -- Wishlist filter: if upgrade would be available, check if this item is on the player's wishlist.

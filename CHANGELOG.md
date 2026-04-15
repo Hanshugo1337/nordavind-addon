@@ -1,5 +1,12 @@
 # NordavindLC Changelog
 
+## 1.7.1 (2026-04-15)
+
+### Bug Fixes
+
+- **Tmog hidden for tier pieces** — tier slot items (head, shoulder, chest, hands, legs) no longer show the Tmog button; only Upgrade, Catalyst, and Offspec are available for tier
+- **Correct buttons for uncached items** — when an item's data hasn't loaded in a raider's client yet (can happen when SESSION_START arrives before WoW caches the item), tier slots now correctly show Catalyst and hide Tmog instead of defaulting to Upgrade + Tmog
+
 ## 1.7.0 (2026-04-14)
 
 ### New Features
