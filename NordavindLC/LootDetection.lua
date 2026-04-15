@@ -74,19 +74,20 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
     if not rollID then return end
 
     local link = GetLootRollItemLink(rollID)
+    local isLeader = UnitIsGroupLeader("player")
 
-    -- Leader doesn't auto-pass — receives loot and trades it to the awarded player
-    -- Everyone else (including officers) auto-passes so the council controls distribution
-    if not UnitIsGroupLeader("player") then
-      local shouldPass = true
+    if isLeader then
+      -- Leader: auto-need on everything. WoW already blocks needing on warbound items.
+      RollOnLoot(rollID, 1) -- 1 = Need
+    else
+      -- Non-leaders auto-pass so the council controls distribution
       if link then
         local _, _, _, _, _, itemType = C_Item.GetItemInfo(link)
-        if itemType == "Miscellaneous" or itemType == "Companion Pets" then
-          shouldPass = false
+        if itemType ~= "Miscellaneous" and itemType ~= "Companion Pets" then
+          RollOnLoot(rollID, 0) -- 0 = Pass
         end
-      end
-      if shouldPass then
-        RollOnLoot(rollID, 0) -- 0 = Pass
+      else
+        RollOnLoot(rollID, 0)
       end
     end
 

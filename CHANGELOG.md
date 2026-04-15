@@ -1,5 +1,11 @@
 # NordavindLC Changelog
 
+## 1.7.3 (2026-04-15)
+
+### New Features
+
+- **Auto-need for raid leader** — når loot dropper auto-needer raid leaderen på alt automatisk; WoW blokkerer warbound items selv. Alle andre auto-passer som før.
+
 ## 1.7.2 (2026-04-15)
 
 ### Bug Fixes
