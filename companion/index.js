@@ -1,9 +1,6 @@
 #!/usr/bin/env node
 "use strict";
 
-// Allow self-signed cert when connecting to server via IP
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
 const fs = require("fs");
 const path = require("path");
 const express = require("express");
@@ -42,6 +39,7 @@ let lastScores = null;
 let lastSyncTime = null;
 let lastError = null;
 let syncCount = 0;
+let isSyncing = false; // backpressure — prevent overlapping poll runs
 
 // ---- API routes for the dashboard ----
 
@@ -68,7 +66,6 @@ app.get("/api/loot", (req, res) => {
     const vars = watcher.read();
     const db = vars?.NordavindLC_DB;
     const history = db?.lootHistory || [];
-    // Return last 50 entries, newest first
     const recent = Array.isArray(history) ? history.slice(-50).reverse() : [];
     res.json(recent);
   } catch {
@@ -97,9 +94,12 @@ app.post("/api/sync", async (req, res) => {
 });
 
 app.post("/api/recalc", async (req, res) => {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) {
+    return res.json({ ok: false, error: "CRON_SECRET not set in .env" });
+  }
   try {
     const mode = req.query.mode || "full";
-    const secret = process.env.CRON_SECRET || "nordavind-cron-2026";
     const calcRes = await fetch(`${WEB_URL}/api/scores/calculate?mode=${mode}`, {
       method: "POST",
       headers: { "x-cron-secret": secret },
@@ -107,7 +107,6 @@ app.post("/api/recalc", async (req, res) => {
     });
     const result = await calcRes.json();
     if (!calcRes.ok) throw new Error(result.error || "Calculation failed");
-    // Re-fetch updated scores
     await fetchAndWriteScores();
     res.json({ ok: true, ...result, lastSync: lastSyncTime });
   } catch (err) {
@@ -140,9 +139,11 @@ async function processExports() {
     for (const award of awards) {
       try {
         await api.awardLoot(award);
+        watcher.markExportSent(); // Only advance counter after confirmed success
         console.log(`[export] Synced: ${award.item} -> ${award.awardedTo}`);
       } catch (err) {
         console.error(`[export] Failed: ${award.item} ->`, err.message);
+        break; // Stop and retry on next poll cycle
       }
     }
   } catch { /* file not found yet */ }
@@ -154,9 +155,11 @@ async function processEdits() {
     for (const edit of edits) {
       try {
         await api.editAward(edit);
+        watcher.markEditSent(); // Only advance counter after confirmed success
         console.log(`[edit] Synced: ${edit.item} -> ${edit.newAwardedTo} (${edit.newCategory})`);
       } catch (err) {
         console.error(`[edit] Failed: ${edit.item} ->`, err.message);
+        break; // Stop and retry on next poll cycle
       }
     }
   } catch { /* file not found yet */ }
@@ -166,8 +169,8 @@ async function processEdits() {
 
 app.listen(PORT, async () => {
   console.log(`NordavindLC Companion running at http://localhost:${PORT}`);
+  console.log(`[state] Export count resumed from: ${watcher.lastExportCount}, edit count: ${watcher.lastEditCount}`);
 
-  // Auto-open in browser
   const url = `http://localhost:${PORT}`;
   try {
     exec(`start "" "${url}"`, (err) => { if (err) console.log("Open browser manually:", url); });
@@ -180,8 +183,17 @@ app.listen(PORT, async () => {
     console.error("Initial sync failed:", err.message);
   }
 
-  // Watch for loot exports and edits every 5 seconds
-  setInterval(() => { processExports(); processEdits(); }, 5000);
+  // Poll for loot exports and edits every 5 seconds (with backpressure)
+  setInterval(async () => {
+    if (isSyncing) return;
+    isSyncing = true;
+    try {
+      await processExports();
+      await processEdits();
+    } finally {
+      isSyncing = false;
+    }
+  }, 5000);
 
   // Re-fetch scores every 10 minutes
   setInterval(async () => {
