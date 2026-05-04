@@ -1,6 +1,8 @@
 -- LootDetection.lua
--- Detect loot drops from boss kills using START_LOOT_ROLL (primary)
--- and ENCOUNTER_LOOT_RECEIVED (tracks who received each item).
+-- Detect loot drops from boss kills.
+-- Primary: CHAT_MSG_LOOT parsing in an 8s window after BOSS_KILL.
+-- START_LOOT_ROLL kept for auto-need only (fires in group loot mode).
+-- ENCOUNTER_LOOT_RECEIVED kept for looter-name tracking only.
 
 local NLC = NordavindLC_NS
 
@@ -12,6 +14,7 @@ function NLC.LootDetection.Register()
   lootFrame:RegisterEvent("ENCOUNTER_LOOT_RECEIVED")
   lootFrame:RegisterEvent("BOSS_KILL")
   lootFrame:RegisterEvent("START_LOOT_ROLL")
+  lootFrame:RegisterEvent("CHAT_MSG_LOOT")
   isRegistered = true
 end
 
@@ -22,9 +25,10 @@ end
 
 local currentBoss = nil
 local droppedItems = {}
-local seenRollItems = {} -- track itemId from rolls to avoid duplicates
+local seenRollItems = {}
+local collectingLoot = false
+local seenChatItems = {}
 
--- Item types to exclude from council
 local EXCLUDED_TYPES = {
   ["Miscellaneous"] = true,
   ["Companion Pets"] = true,
@@ -36,28 +40,30 @@ local function shouldTrackItem(itemLink, itemID)
 
   local _, _, quality, ilvl, _, itemType, itemSubType, _, equipLoc = C_Item.GetItemInfo(itemLink)
 
-  -- Item not cached yet — return nil to signal retry
   if not quality then return nil end
-
-  -- Must be epic+
   if quality < 4 then return false end
-
-  -- Recipes always pass through (leader decides)
   if itemType == "Recipe" then return true, ilvl or 0, equipLoc or "" end
-
-  -- Must be equippable (has a slot)
-  if not equipLoc or equipLoc == "" then return false end
-
-  -- Skip toys, pets, consumables
   if EXCLUDED_TYPES[itemType] then return false end
 
-  -- Skip cosmetic/decor slots
-  if equipLoc == "INVTYPE_BODY" or equipLoc == "INVTYPE_TABARD" then return false end
+  if not equipLoc or equipLoc == "" or equipLoc == "INVTYPE_NON_EQUIP_IGNORE" then
+    local tokenArmor = NLC.Utils.GetTierTokenArmorType(itemLink)
+    if tokenArmor then
+      return true, ilvl or 0, "", tokenArmor
+    end
+    return false
+  end
 
-  -- Skip warbound/account-bound items (can't be traded)
+  if equipLoc == "INVTYPE_BODY" or equipLoc == "INVTYPE_TABARD" then return false end
   if NLC.Utils.IsWarbound(itemLink) then return false end
 
   return true, ilvl or 0, equipLoc or ""
+end
+
+local function showIfAny()
+  collectingLoot = false
+  if NLC.isOfficer and #droppedItems > 0 then
+    NLC.UI.ShowLootDetected(droppedItems)
+  end
 end
 
 lootFrame:SetScript("OnEvent", function(self, event, ...)
@@ -68,6 +74,38 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
     currentBoss = name or "Unknown Boss"
     droppedItems = {}
     seenRollItems = {}
+    seenChatItems = {}
+    collectingLoot = true
+    C_Timer.After(8, showIfAny)
+
+  elseif event == "CHAT_MSG_LOOT" then
+    if not collectingLoot or not NLC.isOfficer then return end
+    local text = ...
+    for link in text:gmatch("|c%x+|Hitem:[^|]+|h%[.-%]|h|r") do
+      local itemID = C_Item.GetItemInfoInstant(link)
+      if itemID and not seenChatItems[itemID] then
+        seenChatItems[itemID] = true
+        local function tryTrackChat(retries)
+          local track, ilvl, equipLoc, armorType = shouldTrackItem(link, itemID)
+          if track == nil and retries > 0 then
+            C_Timer.After(0.5, function() tryTrackChat(retries - 1) end)
+            return
+          end
+          if track then
+            table.insert(droppedItems, {
+              itemLink = link,
+              itemId = itemID,
+              ilvl = ilvl or 0,
+              equipLoc = equipLoc,
+              armorType = armorType,
+              boss = currentBoss,
+              looter = nil,
+            })
+          end
+        end
+        tryTrackChat(5)
+      end
+    end
 
   elseif event == "START_LOOT_ROLL" then
     local rollID = ...
@@ -77,90 +115,24 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
     local isLeader = UnitIsGroupLeader("player")
 
     if isLeader then
-      -- Leader: auto-need on everything. WoW already blocks needing on warbound items.
-      RollOnLoot(rollID, 1) -- 1 = Need
+      RollOnLoot(rollID, 1)
     else
-      -- Non-leaders auto-pass so the council controls distribution
       if link then
         local _, _, _, _, _, itemType = C_Item.GetItemInfo(link)
         if itemType ~= "Miscellaneous" and itemType ~= "Companion Pets" then
-          RollOnLoot(rollID, 0) -- 0 = Pass
+          RollOnLoot(rollID, 0)
         end
       else
         RollOnLoot(rollID, 0)
       end
     end
 
-    -- Non-officers don't need loot detection panel
-    if not NLC.isOfficer then return end
-
-    -- Officer: detect item for loot panel
-    if not link then return end
-    local itemID = C_Item.GetItemInfoInstant(link)
-    if not itemID then return end
-
-    -- Deduplicate (same item can fire multiple times)
-    local rollKey = tostring(rollID)
-    if seenRollItems[rollKey] then return end
-    seenRollItems[rollKey] = true
-
-    local function tryTrackRoll(retries)
-      local track, ilvl, equipLoc = shouldTrackItem(link, itemID)
-      if track == nil and retries > 0 then
-        C_Timer.After(0.5, function() tryTrackRoll(retries - 1) end)
-        return
-      end
-      if track then
-        table.insert(droppedItems, {
-          itemLink = link,
-          itemId = itemID,
-          ilvl = ilvl or 0,
-          equipLoc = equipLoc,
-          boss = currentBoss,
-          looter = nil, -- filled in by ENCOUNTER_LOOT_RECEIVED
-          rollID = rollID,
-        })
-        NLC.UI.ShowLootDetected(droppedItems)
-      end
-    end
-    tryTrackRoll(5)
-
   elseif event == "ENCOUNTER_LOOT_RECEIVED" then
     local encounterID, itemID, itemLink, quantity, playerName, className = ...
-    -- Update looter info on already-detected items
     for _, item in ipairs(droppedItems) do
       if item.itemId == itemID and not item.looter then
         item.looter = playerName
         break
-      end
-    end
-
-    -- Fallback: if START_LOOT_ROLL missed this item, add it
-    if NLC.isOfficer then
-      local found = false
-      for _, item in ipairs(droppedItems) do
-        if item.itemId == itemID then found = true; break end
-      end
-      if not found then
-        local function tryTrack(retries)
-          local track, ilvl, equipLoc = shouldTrackItem(itemLink, itemID)
-          if track == nil and retries > 0 then
-            C_Timer.After(0.5, function() tryTrack(retries - 1) end)
-            return
-          end
-          if track then
-            table.insert(droppedItems, {
-              itemLink = itemLink,
-              itemId = itemID,
-              ilvl = ilvl or 0,
-              equipLoc = equipLoc,
-              boss = currentBoss,
-              looter = playerName,
-            })
-            NLC.UI.ShowLootDetected(droppedItems)
-          end
-        end
-        tryTrack(5)
       end
     end
   end
