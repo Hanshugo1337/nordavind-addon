@@ -25,9 +25,9 @@ end
 
 local currentBoss = nil
 local droppedItems = {}
-local seenRollItems = {}
 local collectingLoot = false
 local seenChatItems = {}
+local collectTimer = nil
 
 local EXCLUDED_TYPES = {
   ["Miscellaneous"] = true,
@@ -73,10 +73,10 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
     local id, name = ...
     currentBoss = name or "Unknown Boss"
     droppedItems = {}
-    seenRollItems = {}
     seenChatItems = {}
     collectingLoot = true
-    C_Timer.After(8, showIfAny)
+    if collectTimer then collectTimer:Cancel() end
+    collectTimer = C_Timer.NewTimer(8, showIfAny)
 
   elseif event == "CHAT_MSG_LOOT" then
     if not collectingLoot or not NLC.isOfficer then return end
@@ -84,8 +84,9 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
     for link in text:gmatch("|c%x+|Hitem:[^|]+|h%[.-%]|h|r") do
       local itemID = C_Item.GetItemInfoInstant(link)
       if itemID and not seenChatItems[itemID] then
-        seenChatItems[itemID] = true
-        local function tryTrackChat(retries)
+        seenChatItems[itemID] = true -- one council entry per itemID; duplicate token drops (multiple raiders receiving same token) are intentionally collapsed
+        local tryTrackChat
+        tryTrackChat = function(retries)
           local track, ilvl, equipLoc, armorType = shouldTrackItem(link, itemID)
           if track == nil and retries > 0 then
             C_Timer.After(0.5, function() tryTrackChat(retries - 1) end)
@@ -115,15 +116,15 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
     local isLeader = UnitIsGroupLeader("player")
 
     if isLeader then
-      RollOnLoot(rollID, 1)
+      RollOnLoot(rollID, 1) -- 1 = Need
     else
       if link then
         local _, _, _, _, _, itemType = C_Item.GetItemInfo(link)
         if itemType ~= "Miscellaneous" and itemType ~= "Companion Pets" then
-          RollOnLoot(rollID, 0)
+          RollOnLoot(rollID, 0) -- 0 = Pass
         end
       else
-        RollOnLoot(rollID, 0)
+        RollOnLoot(rollID, 0) -- 0 = Pass
       end
     end
 
