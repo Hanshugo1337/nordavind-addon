@@ -119,6 +119,7 @@ function NLC.Comms.SendMultiSession(items, boss)
       itemId = item.itemId or 0,
       ilvl = item.ilvl or 0,
       equipLoc = item.equipLoc or "",
+      armorType = item.armorType or nil,
       boss = boss or "",
     })
   end

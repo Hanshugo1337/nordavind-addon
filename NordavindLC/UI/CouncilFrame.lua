@@ -86,6 +86,8 @@ local function createItemRow(parent, index, item)
     local diff = (item.ilvl or 0) - eqIlvl
     local diffColor = diff > 0 and T.GREEN or T.RED
     eqText:SetText(T.MUTED .. "Equipped: |r" .. eqLink .. " " .. T.MUTED .. "(" .. eqIlvl .. ")|r  " .. diffColor .. (diff > 0 and "+" or "") .. diff .. "|r")
+  elseif item.armorType then
+    eqText:SetText(T.MUTED .. "Tier token — " .. item.armorType .. "|r")
   else
     eqText:SetText(T.MUTED .. "Ingen item i slot|r")
   end
@@ -343,7 +345,11 @@ local function refreshLootPanel(items)
     text:SetPoint("LEFT", 12, 0)
     text:SetWidth(360)
     text:SetJustifyH("LEFT")
-    text:SetText((item.itemLink or "?") .. "  " .. T.MUTED .. "(ilvl " .. (item.ilvl or 0) .. ")|r")
+    local itemLabel = (item.itemLink or "?") .. "  " .. T.MUTED .. "(ilvl " .. (item.ilvl or 0) .. ")|r"
+    if item.armorType then
+      itemLabel = itemLabel .. "  " .. T.GOLD_DIM .. "[" .. item.armorType .. "]|r"
+    end
+    text:SetText(itemLabel)
 
     -- Remove button (X)
     local removeBtn = CreateFrame("Button", nil, row, "UIPanelCloseButtonNoScripts")

@@ -1,5 +1,20 @@
 # NordavindLC Changelog
 
+## 1.7.5 (2026-04-29)
+
+### Bug Fixes
+
+- **Score breakdown tooltip fixed** — score breakdown in the ranking tooltip always showed 0.0 due to a key mismatch (`points` vs `value`) between Scoring.lua and RankingFrame.lua
+- **Wizard no longer forces open for raiders** — non-officer raiders no longer see the ranking/wizard window when the collection phase ends; only the awarding officer sees it
+- **Timer minimum enforced at 90s** — config timer is now enforced to at least 90 seconds on load, fixing cases where a stale SavedVariables value caused the popup to close too early
+- **`/nordlc timer <sek>` command added** — officers can now change the response timer in-game
+
+## 1.7.4 (2026-04-29)
+
+### Bug Fixes
+
+- **Tmog logic overhauled** — tmog now defaults to hidden and is only shown for armor of the wrong type in non-tier slots. Previously tmog defaulted to visible and was only explicitly hidden for tier slots, causing it to incorrectly appear alongside Upgrade/Offspec on items you can actually use.
+
 ## 1.7.3 (2026-04-15)
 
 ### New Features

@@ -111,17 +111,52 @@ NLC.Utils.CLASS_ARMOR = {
   MAGE = "Cloth", WARLOCK = "Cloth", PRIEST = "Cloth",
 }
 
+local TIER_TOKEN_ARMOR_TYPES = { Cloth = true, Leather = true, Mail = true, Plate = true }
+
+-- Returns "Cloth", "Leather", "Mail", or "Plate" if the item is an armor-type tier token.
+-- A tier token is epic+, non-equippable, and tied to a specific armor class.
+function NLC.Utils.GetTierTokenArmorType(itemLink)
+  if not itemLink then return nil end
+  local _, _, quality, _, _, _, itemSubType, _, equipLoc = C_Item.GetItemInfo(itemLink)
+  if not quality or quality < 4 then return nil end
+  if equipLoc and equipLoc ~= "" and equipLoc ~= "INVTYPE_NON_EQUIP_IGNORE" then return nil end
+  if itemSubType and TIER_TOKEN_ARMOR_TYPES[itemSubType] then return itemSubType end
+  -- Tooltip fallback: scan for a line that is exactly the armor type name
+  local tooltipData = C_TooltipInfo and C_TooltipInfo.GetItemByHyperlink(itemLink)
+  if tooltipData and tooltipData.lines then
+    for _, line in ipairs(tooltipData.lines) do
+      local t = line.leftText or ""
+      if TIER_TOKEN_ARMOR_TYPES[t] then return t end
+    end
+  end
+  return nil
+end
+
 local ARMOR_SUBCLASS = { [1] = "Cloth", [2] = "Leather", [3] = "Mail", [4] = "Plate" }
 local TIER_SLOTS = { INVTYPE_HEAD = true, INVTYPE_SHOULDER = true, INVTYPE_CHEST = true, INVTYPE_ROBE = true, INVTYPE_HAND = true, INVTYPE_LEGS = true }
 local JEWELRY_SLOTS = { INVTYPE_FINGER = true, INVTYPE_TRINKET = true, INVTYPE_NECK = true, INVTYPE_CLOAK = true }
 local WEAPON_SLOTS = { INVTYPE_WEAPON = true, INVTYPE_2HWEAPON = true, INVTYPE_WEAPONMAINHAND = true, INVTYPE_WEAPONOFFHAND = true, INVTYPE_HOLDABLE = true, INVTYPE_SHIELD = true, INVTYPE_RANGED = true }
 
 function NLC.Utils.GetAvailableCategories(itemLink, equipLoc, itemId)
+  -- Tmog is available on everything by default.
+  -- Only exception: tier-slot items of wrong armor type (can't equip, can't appear).
   local result = { upgrade = false, catalyst = false, offspec = false, tmog = true }
   if not itemLink then return result end
 
-  -- Recipes or items without equipLoc — show upgrade + tmog
+  -- Items without equipLoc: tier tokens or recipes
   if not equipLoc or equipLoc == "" then
+    local tokenArmor = NLC.Utils.GetTierTokenArmorType(itemLink)
+    if tokenArmor then
+      local _, playerClass = UnitClass("player")
+      local myArmor = NLC.Utils.CLASS_ARMOR[playerClass]
+      if myArmor == tokenArmor then
+        result.upgrade = true
+        result.offspec = true
+      end
+      -- Tokens can't be transmogged regardless of armor type
+      return result
+    end
+    -- Non-token (recipe etc.) — leader decides
     result.upgrade = true
     return result
   end
@@ -154,23 +189,26 @@ function NLC.Utils.GetAvailableCategories(itemLink, equipLoc, itemId)
   local armorSubType = ARMOR_SUBCLASS[subclassID] or itemSubTypeStr
 
   if isArmor then
-    if armorSubType and armorSubType == myArmor then
-      -- Primary armor type — full options
+    local correctArmor = armorSubType and armorSubType == myArmor
+    if correctArmor then
       result.upgrade = true
       result.offspec = true
       if TIER_SLOTS[equipLoc] then
         result.catalyst = true
-        result.tmog = false  -- tier pieces should never be used for tmog
       end
     end
   elseif IsEquippableItem(itemLink) then
-    -- Fallback: item is equippable but classID didn't match (e.g. API change, token items,
-    -- or item not yet cached on raider's client when SESSION_START arrived)
     result.upgrade = true
     result.offspec = true
     if TIER_SLOTS[equipLoc] then
       result.catalyst = true
-      result.tmog = false  -- tier slot — hide tmog even when armor type is unknown
+    end
+  else
+    -- Item not yet cached — show upgrade/offspec based on equipLoc; tmog stays true
+    result.upgrade = true
+    result.offspec = true
+    if TIER_SLOTS[equipLoc] then
+      result.catalyst = true
     end
   end
 

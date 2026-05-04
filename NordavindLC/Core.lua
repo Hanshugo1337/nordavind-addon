@@ -46,6 +46,8 @@ frame:SetScript("OnEvent", function(self, event, arg1)
     NordavindLC_DB.pendingTrades = NordavindLC_DB.pendingTrades or {}
     NordavindLC_DB.pendingEdits  = NordavindLC_DB.pendingEdits  or {}
     NordavindLC_DB.weeklyLoot    = NordavindLC_DB.weeklyLoot    or { resetTimestamp = 0, counts = {} }
+    NordavindLC_DB.config        = NordavindLC_DB.config        or {}
+    NordavindLC_DB.config.timer  = math.max(NordavindLC_DB.config.timer or 90, 90)
     NLC.db = NordavindLC_DB
 
     if NordavindLC_Import and NordavindLC_Import.players then
@@ -328,6 +330,17 @@ SlashCmdList["NORDLC"] = function(msg)
     end)
     return
 
+  elseif cmd == "timer" then
+    local secs = tonumber(arg)
+    if secs and secs >= 30 then
+      NLC.db.config.timer = secs
+      NLC.Utils.Print("Timer satt til " .. secs .. " sekunder.")
+    elseif secs then
+      NLC.Utils.Print("Timer må være minst 30 sekunder.")
+    else
+      NLC.Utils.Print("Timer: " .. (NLC.db.config.timer or 90) .. " sekunder. Endre med /nordlc timer <sekunder>")
+    end
+
   elseif cmd == "status" then
     NLC.Utils.Print(NLC.active and "Aktiv" or "Inaktiv")
     NLC.Utils.Print("Officer: " .. (NLC.isOfficer and "Ja" or "Nei"))
@@ -432,6 +445,7 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.Utils.Print("  /nordlc deactivate — Deaktiver addon")
     NLC.Utils.Print("  /nordlc add [item] — Start council (shift-klikk items)")
     NLC.Utils.Print("  /nordlc council — Gjenåpne aktivt loot council vindu")
+    NLC.Utils.Print("  /nordlc timer <sek> — Sett respons-timer (min 30, default 90)")
   NLC.Utils.Print("  /nordlc history — Vis award historikk")
   NLC.Utils.Print("  /nordlc trade — Vis items som venter på trade")
     NLC.Utils.Print("  /nordlc pending — Vis ufordelte items")

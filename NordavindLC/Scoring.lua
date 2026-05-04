@@ -30,15 +30,15 @@ function NLC.Scoring.Calculate(imported, live)
 
   if imported then
     score = imported.baseScore or 0
-    table.insert(breakdown, { label = "Base (web)", points = imported.baseScore or 0 })
+    table.insert(breakdown, { label = "Base (web)", value = imported.baseScore or 0 })
   else
-    table.insert(breakdown, { label = "Base (web)", points = 0 })
+    table.insert(breakdown, { label = "Base (web)", value = 0 })
   end
 
   if live and live.isTier and live.tierCount then
     local tierAdj = NLC.Scoring.TierAdjustment(live.tierCount)
     score = score + tierAdj
-    table.insert(breakdown, { label = "Tier bonus", points = tierAdj })
+    table.insert(breakdown, { label = "Tier bonus", value = tierAdj })
   end
 
   return score, breakdown

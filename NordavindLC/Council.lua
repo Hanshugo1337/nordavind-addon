@@ -35,6 +35,7 @@ function NLC.Council.StartMultiSession(items, boss)
       itemId = item.itemId,
       ilvl = item.ilvl,
       equipLoc = item.equipLoc,
+      armorType = item.armorType,
       boss = boss or item.boss or "Unknown",
       timer = NLC.db.config.timer or 90,
       interests = {},
@@ -92,6 +93,7 @@ function NLC.Council.OnMultiSessionStart(items, timer, sender)
       itemId = item.itemId,
       ilvl = item.ilvl,
       equipLoc = item.equipLoc,
+      armorType = item.armorType,
       boss = item.boss or "Unknown",
       timer = timer,
       interests = {},
@@ -189,7 +191,7 @@ function NLC.Council.CloseCollecting()
   for _, session in ipairs(activeSessions) do
     table.insert(broadcastData, {
       sessionIdx = session.sessionIdx, itemLink = session.itemLink, itemId = session.itemId,
-      ilvl = session.ilvl, equipLoc = session.equipLoc,
+      ilvl = session.ilvl, equipLoc = session.equipLoc, armorType = session.armorType,
       boss = session.boss, ranked = session.ranked, phase = session.phase,
     })
   end
@@ -207,23 +209,31 @@ function NLC.Council.BuildRanking(session)
     local live = {
       equippedIlvl = interest.equippedIlvl,
       tierCount = interest.tierCount,
-      isTier = session.equipLoc and (
+      isTier = session.armorType ~= nil or (session.equipLoc and (
         session.equipLoc == "INVTYPE_HEAD" or
         session.equipLoc == "INVTYPE_SHOULDER" or
         session.equipLoc == "INVTYPE_CHEST" or
         session.equipLoc == "INVTYPE_ROBE" or
         session.equipLoc == "INVTYPE_HAND" or
         session.equipLoc == "INVTYPE_LEGS"
-      ),
+      )),
     }
 
     local score, breakdown = NLC.Scoring.Calculate(imported, live)
     local warnings = NLC.Scoring.GetWarnings(imported, name)
 
+    -- Tier token filter: exclude candidates whose armor type doesn't match the token
+    local skipCandidate = false
+    if session.armorType then
+      local classArmor = NLC.Utils.CLASS_ARMOR[interest.class]
+      if classArmor ~= session.armorType then
+        skipCandidate = true
+      end
+    end
+
     -- Wishlist safety filter: skip "upgrade" candidates if item not on their wishlist
     -- (front-end also hides the button, but this handles stale import data edge cases)
-    local skipCandidate = false
-    if interest.category == "upgrade" and session.itemId then
+    if not skipCandidate and interest.category == "upgrade" and session.itemId then
       if imported and imported.wishlist and #imported.wishlist > 0 then
         local wishlisted = false
         for _, wid in ipairs(imported.wishlist) do
@@ -441,7 +451,7 @@ end
 function NLC.Council.OnSessionClose(data)
   activeSessions = data
   currentWizardIndex = 1
-  NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
+  -- Raiders don't need the wizard — they receive award announcements via chat
 end
 
 function NLC.Council.OnRollCallAck(sender)
