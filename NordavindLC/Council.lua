@@ -219,7 +219,7 @@ function NLC.Council.BuildRanking(session)
       )),
     }
 
-    local score, breakdown = NLC.Scoring.Calculate(imported, live)
+    local score, breakdown = NLC.Scoring.Calculate(imported, live, name)
     local warnings = NLC.Scoring.GetWarnings(imported, name)
 
     -- Tier token filter: exclude candidates whose armor type doesn't match the token

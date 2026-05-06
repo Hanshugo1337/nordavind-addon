@@ -24,13 +24,28 @@ function NLC.Scoring.TierAdjustment(tierCount)
   return 0
 end
 
-function NLC.Scoring.Calculate(imported, live)
+function NLC.Scoring.Calculate(imported, live, playerName)
   local score = 0
   local breakdown = {}
 
   if imported then
     score = imported.baseScore or 0
     table.insert(breakdown, { label = "Base (web)", value = imported.baseScore or 0 })
+
+    -- Adjust for loot awarded during the current raid session that the server hasn't
+    -- seen yet (i.e. since the last /nordlc import). weeklyLoot.counts tracks every
+    -- award made by this officer this week; if that count exceeds what the import
+    -- knew about, apply the extra -5 penalty per item now.
+    local wl = NLC.db.weeklyLoot
+    if playerName and wl and wl.resetTimestamp and wl.resetTimestamp > 0 then
+      local sessionLoot = (wl.counts and wl.counts[playerName]) or 0
+      local importedThisWeek = imported.lootThisWeek or 0
+      if sessionLoot > importedThisWeek then
+        local extraPenalty = (sessionLoot - importedThisWeek) * 5
+        score = score - extraPenalty
+        table.insert(breakdown, { label = "Session loot", value = -extraPenalty })
+      end
+    end
   else
     table.insert(breakdown, { label = "Base (web)", value = 0 })
   end
