@@ -107,8 +107,12 @@ frame:SetScript("OnEvent", function(self, event, arg1)
 
   elseif event == "PLAYER_LOGOUT" then
     NordavindLC_DB = NLC.db
-    -- NordavindLC_Import is managed solely by the companion app
-    -- Don't write back in-session modifications (lootThisWeek etc)
+    -- Preserve import data so companion writes survive /reload.
+    -- Without this, WoW writes nil back on every reload (in-memory state wins).
+    if NLC.db.importData and NLC.db.importData.players and
+       NLC.Utils.TableCount(NLC.db.importData.players) > 0 then
+      NordavindLC_Import = NLC.db.importData
+    end
   end
 end)
 
