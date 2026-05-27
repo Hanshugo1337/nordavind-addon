@@ -177,7 +177,23 @@ function NLC.Activate()
   NLC.CheckOfficer()
   NLC.Comms.Register()
   NLC.LootDetection.Register()
-  NLC.Utils.Print("Activated! " .. (NLC.isOfficer and "(Officer mode)" or "(Raider mode)"))
+
+  -- Refresh import data from the in-memory SavedVariable in case companion wrote it
+  -- before this session started but after the last manual import.
+  if NordavindLC_Import and NordavindLC_Import.players then
+    NLC.db.importData = NLC.Utils.DeepCopy(NordavindLC_Import)
+  end
+
+  local playerCount = NLC.Utils.TableCount(NLC.db.importData and NLC.db.importData.players or {})
+  NLC.Utils.Print("Aktivert! " .. (NLC.isOfficer and "(Officer mode)" or "(Raider mode)"))
+  if playerCount > 0 then
+    NLC.Utils.Print("|cff00ff00" .. playerCount .. " spillere lastet fra import.|r")
+  else
+    NLC.Utils.Print("|cffff4444Advarsel: Ingen import-data funnet!|r")
+    NLC.Utils.Print("  1. Start companion-appen")
+    NLC.Utils.Print("  2. Skriv |cffffffff/reload|r i WoW")
+    NLC.Utils.Print("  3. Aktiver addon på nytt")
+  end
 end
 
 function NLC.Deactivate()
@@ -276,9 +292,13 @@ SlashCmdList["NORDLC"] = function(msg)
   elseif cmd == "import" then
     if NordavindLC_Import and NordavindLC_Import.players then
       NLC.db.importData = NLC.Utils.DeepCopy(NordavindLC_Import)
-      NLC.Utils.Print("Import updated: " .. NLC.Utils.TableCount(NLC.db.importData.players) .. " players")
+      NLC.Utils.Print("Import oppdatert: " .. NLC.Utils.TableCount(NLC.db.importData.players) .. " spillere")
     else
-      NLC.Utils.Print("No import data found. Run the companion app first.")
+      NLC.Utils.Print("|cffff4444Ingen import-data funnet.|r")
+      NLC.Utils.Print("  WoW leser filen kun ved innlogging/reload.")
+      NLC.Utils.Print("  1. Start companion-appen")
+      NLC.Utils.Print("  2. Skriv |cffffffff/reload|r i WoW")
+      NLC.Utils.Print("  3. Data lastes automatisk ved neste aktivering")
     end
   elseif cmd == "reset" then
     NLC.db.pendingTrades = {}
@@ -329,6 +349,9 @@ SlashCmdList["NORDLC"] = function(msg)
       NLC.versionCheckResults = nil
     end)
     return
+
+  elseif cmd == "debug" then
+    NLC.LootDetection.ToggleDebug()
 
   elseif cmd == "timer" then
     local secs = tonumber(arg)
@@ -446,6 +469,7 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.Utils.Print("  /nordlc add [item] — Start council (shift-klikk items)")
     NLC.Utils.Print("  /nordlc council — Gjenåpne aktivt loot council vindu")
     NLC.Utils.Print("  /nordlc timer <sek> — Sett respons-timer (min 30, default 90)")
+    NLC.Utils.Print("  /nordlc debug — Toggle loot detection debug-logging")
   NLC.Utils.Print("  /nordlc history — Vis award historikk")
   NLC.Utils.Print("  /nordlc trade — Vis items som venter på trade")
     NLC.Utils.Print("  /nordlc pending — Vis ufordelte items")

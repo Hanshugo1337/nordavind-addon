@@ -1,15 +1,17 @@
 -- LootDetection.lua
 -- Detect loot drops from boss kills.
--- Primary: CHAT_MSG_LOOT buffered continuously; flushed on ENCOUNTER_END (success).
--- START_LOOT_ROLL kept for auto-need only (fires in group loot mode).
--- ENCOUNTER_LOOT_RECEIVED kept for looter-name tracking only.
 --
--- Why ENCOUNTER_END instead of BOSS_KILL: WoW fires CHAT_MSG_LOOT *before*
--- BOSS_KILL, so using BOSS_KILL as the gate causes all loot messages to be
--- missed. ENCOUNTER_END with success==1 fires after loot is distributed and
--- is reliably later than (or concurrent with) the chat messages.
--- The chatBuffer captures messages up to 30s before encounter end to handle
--- any remaining edge cases.
+-- Detection flow:
+--   ENCOUNTER_END (success) fires when the boss dies — BEFORE loot is distributed.
+--   ENCOUNTER_LOOT_RECEIVED and CHAT_MSG_LOOT fire 1-3s later as items land in bags.
+--
+-- So we must NOT flush on ENCOUNTER_END. Instead, we set waitingForLoot=true and
+-- let incoming ELR/chat events add items directly to droppedItems while the timer runs.
+-- After 8s we show whatever arrived.
+--
+-- waitingForLoot:  true from ENCOUNTER_END success until showIfAny fires.
+-- collectingLoot:  true during an active encounter (ENCOUNTER_START → ENCOUNTER_END),
+--                  used only to guard against chat messages from before the pull.
 
 local NLC = NordavindLC_NS
 
@@ -18,8 +20,9 @@ local isRegistered = false
 
 function NLC.LootDetection.Register()
   if isRegistered then return end
-  lootFrame:RegisterEvent("ENCOUNTER_LOOT_RECEIVED")
+  lootFrame:RegisterEvent("ENCOUNTER_START")
   lootFrame:RegisterEvent("ENCOUNTER_END")
+  lootFrame:RegisterEvent("ENCOUNTER_LOOT_RECEIVED")
   lootFrame:RegisterEvent("START_LOOT_ROLL")
   lootFrame:RegisterEvent("CHAT_MSG_LOOT")
   isRegistered = true
@@ -32,11 +35,12 @@ end
 
 local currentBoss = nil
 local droppedItems = {}
-local collectingLoot = false
-local seenChatItems = {}
+local collectingLoot = false  -- true during pull (ENCOUNTER_START → ENCOUNTER_END)
+local waitingForLoot = false  -- true after ENCOUNTER_END success, until showIfAny
+local seenItems = {}          -- dedup by itemID
 local collectTimer = nil
-local chatBuffer = {} -- rolling buffer of { link, itemID, time } for pre-encounter messages
-local BUFFER_WINDOW = 30 -- seconds to look back in buffer when encounter ends
+
+local debugMode = false
 
 local EXCLUDED_TYPES = {
   ["Miscellaneous"] = true,
@@ -44,16 +48,19 @@ local EXCLUDED_TYPES = {
   ["Consumable"] = true,
 }
 
+local function dbg(msg)
+  if debugMode then
+    NLC.Utils.Print("|cff00bbff[LootDebug]|r " .. msg)
+  end
+end
+
 local function shouldTrackItem(itemLink, itemID)
   if not itemLink or not itemID then return false end
-
   local _, _, quality, ilvl, _, itemType, itemSubType, _, equipLoc = C_Item.GetItemInfo(itemLink)
-
   if not quality then return nil end
   if quality < 4 then return false end
   if itemType == "Recipe" then return true, ilvl or 0, equipLoc or "" end
   if EXCLUDED_TYPES[itemType] then return false end
-
   if not equipLoc or equipLoc == "" or equipLoc == "INVTYPE_NON_EQUIP_IGNORE" then
     local tokenArmor = NLC.Utils.GetTierTokenArmorType(itemLink)
     if tokenArmor then
@@ -61,130 +68,119 @@ local function shouldTrackItem(itemLink, itemID)
     end
     return false
   end
-
   if equipLoc == "INVTYPE_BODY" or equipLoc == "INVTYPE_TABARD" then return false end
   if NLC.Utils.IsWarbound(itemLink) then return false end
-
   return true, ilvl or 0, equipLoc or ""
 end
 
 local function showIfAny()
-  collectingLoot = false
+  waitingForLoot = false
+  collectTimer = nil
   if NLC.isOfficer and #droppedItems > 0 then
     NLC.UI.ShowLootDetected(droppedItems)
   end
 end
 
-local function flushBufferToDropped()
-  local now = GetTime()
-  for _, entry in ipairs(chatBuffer) do
-    if (now - entry.time) <= BUFFER_WINDOW and not seenChatItems[entry.itemID] then
-      seenChatItems[entry.itemID] = true -- one council entry per itemID
-      local link, itemID = entry.link, entry.itemID
-      local tryTrackChat
-      tryTrackChat = function(retries)
-        local track, ilvl, equipLoc, armorType = shouldTrackItem(link, itemID)
-        if track == nil and retries > 0 then
-          C_Timer.After(0.5, function() tryTrackChat(retries - 1) end)
-          return
-        end
-        if track then
-          table.insert(droppedItems, {
-            itemLink = link,
-            itemId = itemID,
-            ilvl = ilvl or 0,
-            equipLoc = equipLoc,
-            armorType = armorType,
-            boss = currentBoss,
-            looter = nil,
-          })
-        end
-      end
-      tryTrackChat(5)
-    end
+local function tryAddItem(link, itemID, boss, looter, retries)
+  local track, ilvl, equipLoc, armorType = shouldTrackItem(link, itemID)
+  if track == nil and retries > 0 then
+    C_Timer.After(0.5, function() tryAddItem(link, itemID, boss, looter, retries - 1) end)
+    return
   end
-  chatBuffer = {}
+  if track then
+    table.insert(droppedItems, {
+      itemLink = link,
+      itemId = itemID,
+      ilvl = ilvl or 0,
+      equipLoc = equipLoc,
+      armorType = armorType,
+      boss = boss,
+      looter = looter,
+    })
+    dbg("Added: " .. link .. " (looter: " .. (looter or "?") .. ")")
+  end
+end
+
+local function resetState()
+  droppedItems = {}
+  seenItems = {}
+  collectingLoot = false
+  waitingForLoot = false
+  if collectTimer then collectTimer:Cancel(); collectTimer = nil end
 end
 
 lootFrame:SetScript("OnEvent", function(self, event, ...)
   if not NLC.active then return end
 
-  if event == "ENCOUNTER_END" then
-    local encounterID, name, difficultyID, groupSize, success = ...
-    if success ~= 1 then return end
+  if event == "ENCOUNTER_START" then
+    local encounterID, name = ...
     currentBoss = name or "Unknown Boss"
-    droppedItems = {}
-    seenChatItems = {}
+    resetState()
     collectingLoot = true
+    dbg("ENCOUNTER_START: " .. currentBoss)
+
+  elseif event == "ENCOUNTER_END" then
+    local encounterID, name, difficultyID, groupSize, success = ...
+    dbg(string.format("ENCOUNTER_END: %s | success=%s (%s)", tostring(name), tostring(success), type(success)))
+    if not (success == 1 or success == true) then
+      resetState()
+      dbg("Encounter failed, resetting.")
+      return
+    end
+    if name then currentBoss = name end
+    collectingLoot = false
+    -- NOTE: do NOT flush here — loot arrives AFTER ENCOUNTER_END.
+    -- Set waitingForLoot so incoming ELR/chat events add directly to droppedItems.
+    waitingForLoot = true
     if collectTimer then collectTimer:Cancel() end
-    flushBufferToDropped()
     collectTimer = C_Timer.NewTimer(8, showIfAny)
+    dbg("Encounter success, waiting 8s for loot events.")
+
+  elseif event == "ENCOUNTER_LOOT_RECEIVED" then
+    local encounterID, itemID, itemLink, quantity, playerName, className = ...
+    dbg(string.format("ENCOUNTER_LOOT_RECEIVED: id=%s player=%s link=%s", tostring(itemID), tostring(playerName), tostring(itemLink)))
+    if not itemID or not itemLink then return end
+    if waitingForLoot and not seenItems[itemID] then
+      seenItems[itemID] = true
+      tryAddItem(itemLink, itemID, currentBoss, playerName, 5)
+    end
+    -- Update looter on already-added items
+    for _, item in ipairs(droppedItems) do
+      if item.itemId == itemID and not item.looter then
+        item.looter = playerName
+        break
+      end
+    end
 
   elseif event == "CHAT_MSG_LOOT" then
     if not NLC.isOfficer then return end
     local text = ...
-    local now = GetTime()
+    dbg("CHAT_MSG_LOOT: " .. (text or "nil"))
+    -- Only process during the post-ENCOUNTER_END loot window
+    if not waitingForLoot then return end
     for link in text:gmatch("|c%x+|Hitem:[^|]+|h%[.-%]|h|r") do
       local itemID = C_Item.GetItemInfoInstant(link)
-      if itemID then
-        if collectingLoot then
-          -- Encounter already started: process immediately
-          if not seenChatItems[itemID] then
-            seenChatItems[itemID] = true -- one council entry per itemID; duplicate token drops intentionally collapsed
-            local tryTrackChat
-            tryTrackChat = function(retries)
-              local track, ilvl, equipLoc, armorType = shouldTrackItem(link, itemID)
-              if track == nil and retries > 0 then
-                C_Timer.After(0.5, function() tryTrackChat(retries - 1) end)
-                return
-              end
-              if track then
-                table.insert(droppedItems, {
-                  itemLink = link,
-                  itemId = itemID,
-                  ilvl = ilvl or 0,
-                  equipLoc = equipLoc,
-                  armorType = armorType,
-                  boss = currentBoss,
-                  looter = nil,
-                })
-              end
-            end
-            tryTrackChat(5)
-          end
-        else
-          -- Pre-encounter: buffer for later
-          table.insert(chatBuffer, { link = link, itemID = itemID, time = now })
-        end
+      if itemID and not seenItems[itemID] then
+        seenItems[itemID] = true
+        tryAddItem(link, itemID, currentBoss, nil, 5)
       end
     end
 
   elseif event == "START_LOOT_ROLL" then
     local rollID = ...
     if not rollID then return end
-
     local link = GetLootRollItemLink(rollID)
     local isLeader = UnitIsGroupLeader("player")
-
     if isLeader then
-      RollOnLoot(rollID, 1) -- 1 = Need
+      RollOnLoot(rollID, 1)
     else
       if link then
         local _, _, _, _, _, itemType = C_Item.GetItemInfo(link)
         if itemType ~= "Miscellaneous" and itemType ~= "Companion Pets" then
-          RollOnLoot(rollID, 0) -- 0 = Pass
+          RollOnLoot(rollID, 0)
         end
       else
-        RollOnLoot(rollID, 0) -- 0 = Pass
-      end
-    end
-
-  elseif event == "ENCOUNTER_LOOT_RECEIVED" then
-    local encounterID, itemID, itemLink, quantity, playerName, className = ...
-    for _, item in ipairs(droppedItems) do
-      if item.itemId == itemID and not item.looter then
-        item.looter = playerName
-        break
+        RollOnLoot(rollID, 0)
       end
     end
   end
@@ -200,4 +196,15 @@ end
 
 function NLC.LootDetection.GetCurrentBoss()
   return currentBoss
+end
+
+function NLC.LootDetection.ToggleDebug()
+  debugMode = not debugMode
+  NLC.Utils.Print("Loot debug: " .. (debugMode and "|cff00ff00PÅ|r" or "|cffff0000AV|r"))
+  if debugMode then
+    NLC.Utils.Print("  collectingLoot=" .. tostring(collectingLoot))
+    NLC.Utils.Print("  waitingForLoot=" .. tostring(waitingForLoot))
+    NLC.Utils.Print("  currentBoss=" .. tostring(currentBoss))
+    NLC.Utils.Print("  droppedItems=" .. #droppedItems)
+  end
 end
