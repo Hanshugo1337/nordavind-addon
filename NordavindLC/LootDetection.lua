@@ -3,10 +3,13 @@
 --
 -- Detection flow:
 --   ENCOUNTER_END (success) fires when the boss dies — BEFORE loot is distributed.
---   ENCOUNTER_LOOT_RECEIVED and CHAT_MSG_LOOT fire 1-3s later as items land in bags.
+--   With Group Loot, START_LOOT_ROLL fires a second or two later for each dropped
+--   item — this is the FIRST event that names the loot, so we capture items here.
+--   ENCOUNTER_LOOT_RECEIVED and CHAT_MSG_LOOT only fire once the rolls resolve
+--   (often past the window); we still listen to them as a fallback / for looter info.
 --
 -- So we must NOT flush on ENCOUNTER_END. Instead, we set waitingForLoot=true and
--- let incoming ELR/chat events add items directly to droppedItems while the timer runs.
+-- let incoming roll/loot events add items directly to droppedItems while the timer runs.
 -- After 8s we show whatever arrived.
 --
 -- waitingForLoot:  true from ENCOUNTER_END success until showIfAny fires.
@@ -170,6 +173,20 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
     local rollID = ...
     if not rollID then return end
     local link = GetLootRollItemLink(rollID)
+
+    -- Group Loot: START_LOOT_ROLL is the FIRST event that names a dropped item.
+    -- ENCOUNTER_LOOT_RECEIVED / CHAT_MSG_LOOT only fire once the need/greed rolls
+    -- resolve — usually long after the 8s window closes — so with Group Loot the
+    -- council panel never had any items. Capture the item here instead.
+    if waitingForLoot and link then
+      local itemID = C_Item.GetItemInfoInstant(link)
+      if itemID and not seenItems[itemID] then
+        seenItems[itemID] = true
+        tryAddItem(link, itemID, currentBoss, nil, 5)
+        dbg("START_LOOT_ROLL captured: " .. link)
+      end
+    end
+
     local isLeader = UnitIsGroupLeader("player")
     if isLeader then
       RollOnLoot(rollID, 1)
