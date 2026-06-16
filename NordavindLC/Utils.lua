@@ -214,7 +214,10 @@ function NLC.Utils.GetAvailableCategories(itemLink, equipLoc, itemId)
 
   -- Wishlist filter: if upgrade would be available, check if this item is on the player's wishlist.
   -- If import data exists but the item is NOT wishlisted, disable upgrade.
-  if result.upgrade and itemId then
+  -- Tier-slot items are EXEMPT: tier is build-defining and rarely sits on a wishlist, so
+  -- filtering it out wrongly stripped "upgrade" from players who can actually use the tier
+  -- piece, leaving only "catalyst". Tier slots always allow upgrade for the right armor type.
+  if result.upgrade and itemId and not TIER_SLOTS[equipLoc] then
     local playerName = UnitName("player")
     local imported = NLC.db and NLC.db.importData and NLC.db.importData.players and
                      NLC.db.importData.players[playerName]
