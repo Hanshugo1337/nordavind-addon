@@ -247,6 +247,12 @@ function NLC.UI.ShowRanking(session, candidates)
         if button ~= "RightButton" or not MenuUtil then return end
         MenuUtil.CreateContextMenu(self, function(_, root)
           root:CreateTitle(c.name)
+          root:CreateButton("Legg til i roll", function() NLC.Council.AddToRoll(c.name) end)
+          if #NLC.Council.GetRollState().names >= 2 then
+            root:CreateButton("Start roll (" .. #NLC.Council.GetRollState().names .. ")", function()
+              NLC.Council.StartRoll()
+            end)
+          end
           local catSub = root:CreateButton("Bytt kategori")
           for _, cat in ipairs({ "upgrade", "catalyst", "offspec", "tmog" }) do
             catSub:CreateButton(cat, function() NLC.Council.ChangeCategory(c.name, cat) end)
@@ -277,7 +283,18 @@ function NLC.UI.ShowRanking(session, candidates)
     -- Score or Roll (gold, prominent)
     local scoreText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     scoreText:SetPoint("LEFT", COL.score, 0)
-    if c.roll then
+    local rollState = NLC.Council.GetRollState and NLC.Council.GetRollState() or { names = {}, results = {} }
+    local inRoll = false
+    for _, n in ipairs(rollState.names) do if n == c.name then inRoll = true; break end end
+    if inRoll then
+      local rollVal = rollState.results[c.name]
+      -- Mark the current highest roll as the winner.
+      local best, bestName = -1, nil
+      for n, v in pairs(rollState.results) do if v > best then best, bestName = v, n end end
+      local won = (c.name == bestName)
+      scoreText:SetText((won and T.GREEN or T.GOLD_LIGHT) ..
+        "Roll " .. (rollVal and tostring(rollVal) or "…") .. (won and " *" or "") .. "|r")
+    elseif c.roll then
       scoreText:SetText(T.GOLD_LIGHT .. "Roll: " .. c.roll .. "|r")
     else
       scoreText:SetText(T.GOLD_LIGHT .. string.format("%.1f", c.score) .. "|r")

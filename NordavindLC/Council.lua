@@ -337,6 +337,7 @@ function NLC.Council.Award(playerName)
   end
 
   session.phase = "awarded"
+  NLC.Council.ClearRoll()
   NLC.Council.AdvanceWizard()
 end
 
@@ -427,6 +428,76 @@ end
 
 function NLC.Council.WhisperCandidate(name)
   ChatFrame_SendTell(name)
+end
+
+-- ============================================================
+-- Roll-off between candidates (to break ties)
+-- ============================================================
+local _roll = { names = {}, results = {}, active = false }
+local _rollFrame = CreateFrame("Frame")
+
+-- Build a locale-independent pattern from RANDOM_ROLL_RESULT ("%s rolls %d (%d-%d)").
+-- Escape ALL magic characters first (including the % in %s/%d and the literal parens),
+-- then restore the placeholders as capture groups.
+local _rollPattern = (_G.RANDOM_ROLL_RESULT or "%s rolls %d (%d-%d)")
+  :gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+  :gsub("%%%%s", "(.+)")
+  :gsub("%%%%d", "(%%d+)")
+
+function NLC.Council.GetRollState() return _roll end
+
+function NLC.Council.ClearRoll()
+  _roll = { names = {}, results = {}, active = false }
+  _rollFrame:UnregisterEvent("CHAT_MSG_SYSTEM")
+end
+
+function NLC.Council.AddToRoll(name)
+  for _, n in ipairs(_roll.names) do if n == name then return end end
+  table.insert(_roll.names, name)
+  if NLC.UI.IsWizardOpen and NLC.UI.IsWizardOpen() then
+    NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
+  end
+end
+
+_rollFrame:SetScript("OnEvent", function(_, _, text)
+  if not _roll.active or not text then return end
+  local who, roll = text:match(_rollPattern)
+  if not who then return end
+  who = who:match("^([^-]+)") or who
+  for _, n in ipairs(_roll.names) do
+    if n == who and not _roll.results[who] then
+      _roll.results[who] = tonumber(roll)
+      if NLC.UI.IsWizardOpen and NLC.UI.IsWizardOpen() then
+        NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
+      end
+      break
+    end
+  end
+end)
+
+function NLC.Council.StartRoll()
+  if #_roll.names < 2 then
+    NLC.Utils.Print("Legg til minst 2 kandidater i roll-offen.")
+    return
+  end
+  _roll.results = {}
+  _roll.active = true
+  _rollFrame:RegisterEvent("CHAT_MSG_SYSTEM")
+  local session = activeSessions[currentWizardIndex]
+  local itemLabel = (session and session.itemLink) or "item"
+  local myName = UnitName("player")
+  for _, n in ipairs(_roll.names) do
+    if n == myName then
+      RandomRoll(1, 100)
+    else
+      SendChatMessage("Roll-off for " .. itemLabel .. " — /roll 100 takk!", "WHISPER", nil, n)
+    end
+  end
+  -- Close the capture window after 15s.
+  C_Timer.After(15, function()
+    _roll.active = false
+    _rollFrame:UnregisterEvent("CHAT_MSG_SYSTEM")
+  end)
 end
 
 function NLC.Council.GetWizardIndex()
