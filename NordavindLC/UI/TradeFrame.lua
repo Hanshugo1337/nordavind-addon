@@ -152,6 +152,16 @@ local function refreshTradeFrame()
   for _, region in ipairs({ tradeFrame.content:GetRegions() }) do region:Hide() end
 
   local pending = NLC.Trade.GetPending()
+
+  -- Estimate remaining trade time per entry and sort ascending (most urgent first).
+  for _, entry in ipairs(pending) do
+    local bag, slot = FindItemInBags(entry.itemId)
+    entry._tradeSec = (bag and slot) and NLC.Utils.GetBagItemTradeSeconds(bag, slot) or nil
+  end
+  table.sort(pending, function(a, b)
+    return (a._tradeSec or math.huge) < (b._tradeSec or math.huge)
+  end)
+
   local count = #pending
 
   if count == 0 then
@@ -177,18 +187,23 @@ local function refreshTradeFrame()
     row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_HEIGHT)
     row:Show()
 
-    -- Item link
+    -- Item icon
+    local icon = T.CreateItemIcon(row, 34)
+    icon:SetPoint("LEFT", 8, 0)
+    icon:SetItem(entry.item)
+
+    -- Item link (shifted right of the icon)
     local itemText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    itemText:SetPoint("LEFT", 12, 8)
-    itemText:SetWidth(280)
+    itemText:SetPoint("LEFT", 48, 8)
+    itemText:SetWidth(250)
     itemText:SetJustifyH("LEFT")
     itemText:SetText(entry.item or "?")
 
     -- Item tooltip
     if entry.item then
       local hover = CreateFrame("Frame", nil, row)
-      hover:SetSize(280, 20)
-      hover:SetPoint("LEFT", 12, 8)
+      hover:SetSize(250, 20)
+      hover:SetPoint("LEFT", 48, 8)
       hover:EnableMouse(true)
       hover:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -200,8 +215,13 @@ local function refreshTradeFrame()
 
     -- Awarded to
     local toText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    toText:SetPoint("LEFT", 12, -8)
+    toText:SetPoint("LEFT", 48, -8)
     toText:SetText(T.MUTED .. "Til:|r " .. (entry.awardedTo or "?") .. "  " .. T.MUTED .. "(" .. (entry.category or "?") .. ")|r")
+
+    -- Trade-timer countdown badge (right of the item line, left of the buttons)
+    local badge = T.CreateTimerBadge(row)
+    badge:SetPoint("RIGHT", -200, 8)
+    badge:SetSeconds(entry._tradeSec)
 
     -- Trade button
     local tradeBtn = T.CreateButton(row, 80, 32, T.GREEN .. "Trade|r")
@@ -262,6 +282,15 @@ function NLC.UI.ShowTradeFrame()
 
   refreshTradeFrame()
   tradeFrame:Show()
+
+  -- Trade timers count down — refresh every 30s while the window is open.
+  if not tradeFrame._ticker then
+    tradeFrame._ticker = C_Timer.NewTicker(30, function()
+      if tradeFrame and tradeFrame:IsShown() then
+        refreshTradeFrame()
+      end
+    end)
+  end
 end
 
 function NLC.UI.HideTradeFrame()

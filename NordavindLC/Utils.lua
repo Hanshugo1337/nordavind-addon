@@ -122,6 +122,26 @@ function NLC.Utils.IsTradeableBagItem(bag, slot)
   return false
 end
 
+-- Rough estimate of remaining trade seconds for the item in (bag, slot), or nil.
+-- Precision is intentionally coarse: the tooltip often shows only "N h"/"N m".
+function NLC.Utils.GetBagItemTradeSeconds(bag, slot)
+  local data = C_TooltipInfo and C_TooltipInfo.GetBagItem(bag, slot)
+  if not data or not data.lines then return nil end
+  local marker = _G.BIND_TRADE_TIME_REMAINING or "You may trade this item"
+  marker = marker:gsub("%%s.*$", ""):gsub("%s+$", "")
+  for _, line in ipairs(data.lines) do
+    local text = line.leftText or ""
+    if text:find(marker, 1, true) then
+      local hours = tonumber(text:match("(%d+)%s*[Hht]")) or 0
+      local mins  = tonumber(text:match("(%d+)%s*[Mm]")) or 0
+      local sec = hours * 3600 + mins * 60
+      if sec == 0 then sec = 7200 end -- found the line but couldn't parse → assume 2h
+      return sec
+    end
+  end
+  return nil
+end
+
 -- Armor type per class (for filtering council buttons)
 NLC.Utils.CLASS_ARMOR = {
   WARRIOR = "Plate", PALADIN = "Plate", DEATHKNIGHT = "Plate",
