@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8">
+  <title>NordavindLC Companion — oppsett</title>
+  <style>
+    body { font-family: "Segoe UI", sans-serif; background: #0a101e; color: #e8e0d0; margin: 0; padding: 24px; }
+    h1 { color: #c9a84c; font-size: 20px; margin: 0 0 4px; }
+    p.sub { color: #b8aa98; margin: 0 0 20px; font-size: 13px; }
+    label { display: block; margin: 12px 0 4px; font-size: 13px; color: #b8aa98; }
+    input, select { width: 100%; box-sizing: border-box; padding: 8px; background: #060b16; border: 1px solid #3a2f18;
+      color: #e8e0d0; border-radius: 4px; font-size: 13px; }
+    .row-check { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+    .row-check input { width: auto; }
+    button { margin-top: 22px; width: 100%; padding: 11px; background: #c9a84c; color: #0a101e; border: none;
+      border-radius: 4px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    button:hover { background: #f0c866; }
+    .err { color: #ff6666; font-size: 12px; margin-top: 8px; min-height: 16px; }
+  </style>
+</head>
+<body>
+  <h1>NordavindLC Companion</h1>
+  <p class="sub">Førstegangs-oppsett. Feltene fylles ut automatisk der det er mulig.</p>
+
+  <label for="wowPath">WoW-installasjonssti</label>
+  <input id="wowPath" placeholder="C:\World of Warcraft">
+
+  <label for="account">Konto</label>
+  <select id="account"></select>
+
+  <label for="apiKey">API-nøkkel</label>
+  <input id="apiKey" placeholder="Fra nordavind.cc">
+
+  <label for="webUrl">Web-URL</label>
+  <input id="webUrl" value="https://nordavind.cc">
+
+  <label for="cronSecret">CRON-secret (valgfritt)</label>
+  <input id="cronSecret" placeholder="Kun for full beregning">
+
+  <div class="row-check">
+    <input type="checkbox" id="startWithWindows" checked>
+    <label for="startWithWindows" style="margin:0;">Start med Windows</label>
+  </div>
+
+  <div class="err" id="err"></div>
+  <button id="save">Lagre og start</button>
+
+  <script>
+    (async () => {
+      const $ = (id) => document.getElementById(id);
+      const sel = $("account");
+      const fill = (accounts) => { sel.innerHTML = (accounts || []).map((a) => `<option>${a}</option>`).join(""); };
+
+      const d = await window.wizard.detect();
+      if (d.wowPath) $("wowPath").value = d.wowPath;
+      fill(d.accounts);
+
+      $("wowPath").addEventListener("change", async (e) => {
+        fill(await window.wizard.accounts(e.target.value));
+      });
+
+      $("save").addEventListener("click", async () => {
+        if (!$("wowPath").value || !sel.value || !$("apiKey").value) {
+          $("err").textContent = "WoW-sti, konto og API-nøkkel må fylles ut.";
+          return;
+        }
+        await window.wizard.save({
+          wowPath: $("wowPath").value,
+          account: sel.value,
+          apiKey: $("apiKey").value,
+          webUrl: $("webUrl").value,
+          cronSecret: $("cronSecret").value,
+          startWithWindows: $("startWithWindows").checked,
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
