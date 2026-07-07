@@ -453,6 +453,7 @@ SlashCmdList["NORDLC"] = function(msg)
       { itemLink = "|cffa335ee|Hitem:333333::::::::80:::::|h[Quel'Danas Legguards]|h|r", itemId = 333333, ilvl = 636, equipLoc = "INVTYPE_LEGS", boss = "Test Boss", looter = "Player3" },
       { itemLink = "|cffa335ee|Hitem:444444::::::::80:::::|h[Voidspire Trinket]|h|r", itemId = 444444, ilvl = 639, equipLoc = "INVTYPE_TRINKET", boss = "Test Boss", looter = "Player1" },
     }
+    NLC.LootDetection._setDetected(fakeItems)  -- seed the panel's backing list so remove/Start Council work
     NLC.UI.ShowLootDetected(fakeItems)
     NLC.Utils.Print("Test loot panel shown with 4 items. Remove unwanted items, then click Start Council.")
 
