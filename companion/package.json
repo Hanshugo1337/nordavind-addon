@@ -2,6 +2,7 @@
   "name": "nordavind-companion",
   "version": "3.0.0",
   "description": "NordavindLC Companion — Electron tray app that syncs loot council scoring with nordavind.cc",
+  "author": "Nordavind",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
