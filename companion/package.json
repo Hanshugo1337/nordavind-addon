@@ -1,11 +1,12 @@
 {
   "name": "nordavind-companion",
-  "version": "2.0.0",
-  "description": "NordavindLC Companion — localhost dashboard for loot council scoring",
+  "version": "3.0.0",
+  "description": "NordavindLC Companion — Electron tray app that syncs loot council scoring with nordavind.cc",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test"
+    "test": "node --test",
+    "dist": "electron-builder"
   },
   "dependencies": {
     "electron-store": "^8.2.0",
@@ -13,6 +14,26 @@
     "express": "^4.21.0"
   },
   "devDependencies": {
-    "electron": "^33.0.0"
+    "electron": "^33.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "cc.nordavind.companion",
+    "productName": "NordavindLC Companion",
+    "win": { "target": "nsis" },
+    "publish": [
+      { "provider": "github", "owner": "Hanshugo1337", "repo": "nordavind-addon" }
+    ],
+    "files": [
+      "main.js",
+      "preload.js",
+      "config.js",
+      "wizard.js",
+      "wizard-preload.js",
+      "wizard.html",
+      "lib/**",
+      "renderer/**",
+      "public/**"
+    ]
   }
 }
