@@ -11,7 +11,10 @@ class SavedVarsWatcher {
       "SavedVariables", "NordavindLC.lua"
     );
     this.statePath = path.join(__dirname, "..", "companion-state.json");
-    this.lastMtime = 0;
+    // Independent mtime tracking per stream — a shared mtime made whichever ran
+    // second (exports vs edits) skip the file it hadn't processed yet.
+    this.lastExportMtime = 0;
+    this.lastEditMtime = 0;
 
     const state = this._loadState();
     this.lastExportCount = state.exportCount || 0;
@@ -45,8 +48,8 @@ class SavedVarsWatcher {
     if (!stat) return [];
 
     const mtime = stat.mtimeMs;
-    if (mtime <= this.lastMtime) return [];
-    this.lastMtime = mtime;
+    if (mtime <= this.lastExportMtime) return [];
+    this.lastExportMtime = mtime;
 
     const vars = this.read();
     const db = vars?.NordavindLC_DB;
@@ -76,8 +79,8 @@ class SavedVarsWatcher {
     if (!stat) return [];
 
     const mtime = stat.mtimeMs;
-    if (mtime <= this.lastMtime) return [];
-    this.lastMtime = mtime;
+    if (mtime <= this.lastEditMtime) return [];
+    this.lastEditMtime = mtime;
 
     const vars = this.read();
     const db = vars?.NordavindLC_DB;
@@ -119,7 +122,10 @@ class SavedVarsWatcher {
       existing += "\n" + importStr;
     }
 
-    fs.writeFileSync(this.svPath, existing, "utf-8");
+    // Atomic write: temp file + rename, so an interrupted write can't corrupt SavedVariables.
+    const tmp = this.svPath + ".tmp";
+    fs.writeFileSync(tmp, existing, "utf-8");
+    fs.renameSync(tmp, this.svPath);
   }
 }
 

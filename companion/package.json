@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "description": "NordavindLC Companion — localhost dashboard for loot council scoring",
   "main": "index.js",
-  "scripts": { "start": "node index.js" },
+  "scripts": { "start": "node index.js", "test": "node --test" },
   "dependencies": {
     "express": "^4.21.0"
   }
