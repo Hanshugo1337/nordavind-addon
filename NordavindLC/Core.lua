@@ -206,7 +206,8 @@ function NLC.Deactivate()
   NLC.Utils.Print("Deactivated.")
 end
 
-function NLC.RecordAward(item, awardedTo, awardedBy, boss, category, itemId)
+function NLC.RecordAward(item, awardedTo, awardedBy, boss, category, itemId, exportable)
+  if exportable == nil then exportable = true end
   local entry = {
     item = item,
     awardedTo = awardedTo,
@@ -216,9 +217,12 @@ function NLC.RecordAward(item, awardedTo, awardedBy, boss, category, itemId)
     timestamp = time(),
   }
   table.insert(NLC.db.lootHistory, entry)
-  table.insert(NLC.db.pendingExport, entry)
+  if exportable then
+    -- Only real player awards are exported to the website. Disenchant/Bank/Free are not.
+    table.insert(NLC.db.pendingExport, entry)
+  end
 
-  -- Add to pending trades
+  -- Add to pending trades (so the item can still be traded onward)
   local id = itemId or C_Item.GetItemInfoInstant(item)
   NLC.Trade.Add(item, id, awardedTo, awardedBy, boss, category)
 end

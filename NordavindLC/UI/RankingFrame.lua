@@ -110,6 +110,19 @@ function NLC.UI.ShowRanking(session, candidates)
       rankFrame:Hide()
     end)
 
+    -- "Annet" — send item to a non-player target (Disenchant/Bank/Free), does not count as loot.
+    rankFrame.specialBtn = T.CreateButton(rankFrame, 120, 34, "Annet")
+    rankFrame.specialBtn:SetPoint("BOTTOMLEFT", 190, 16)
+    rankFrame.specialBtn:SetScript("OnClick", function(self)
+      if not MenuUtil then return end
+      MenuUtil.CreateContextMenu(self, function(_, root)
+        root:CreateTitle("Send item til")
+        root:CreateButton("Disenchant", function() NLC.Council.AwardSpecial("disenchant") end)
+        root:CreateButton("Guild Bank", function() NLC.Council.AwardSpecial("bank") end)
+        root:CreateButton("Free (gratis)", function() NLC.Council.AwardSpecial("free") end)
+      end)
+    end)
+
     rankFrame.closeBtn = T.CreateButton(rankFrame, 120, 34, "Close")
     rankFrame.closeBtn:SetPoint("BOTTOMRIGHT", -20, 16)
     rankFrame.closeBtn:SetScript("OnClick", function()
@@ -137,6 +150,9 @@ function NLC.UI.ShowRanking(session, candidates)
   -- Update title with item link
   rankFrame.title:SetText(T.GOLD .. "Loot Council|r  " .. T.MUTED .. "—|r  " .. (session.itemLink or "?"))
   rankFrame.laterBtn:SetShown(NLC.isOfficer and UnitIsGroupLeader("player"))
+  if rankFrame.specialBtn then
+    rankFrame.specialBtn:SetShown(NLC.isOfficer and UnitIsGroupLeader("player"))
+  end
 
   -- Clear previous rows
   for _, child in ipairs({ rankFrame.scrollChild:GetChildren() }) do

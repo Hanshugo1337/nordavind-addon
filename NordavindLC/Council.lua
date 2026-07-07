@@ -341,6 +341,21 @@ function NLC.Council.Award(playerName)
   NLC.Council.AdvanceWizard()
 end
 
+-- Award to a non-player target (disenchant/bank/free). Logged and tradeable, but does NOT
+-- count as loot: no weekly counter, not exported to the website.
+local SPECIAL_LABEL = { disenchant = "Disenchant", bank = "Guild Bank", free = "Free" }
+function NLC.Council.AwardSpecial(target)
+  if not NLC.isOfficer or not UnitIsGroupLeader("player") then return end
+  local session = activeSessions[currentWizardIndex]
+  if not session then return end
+  local label = SPECIAL_LABEL[target] or target
+  NLC.RecordAward(session.itemLink, label, UnitName("player"), session.boss, target, session.itemId, false)
+  NLC.Utils.Print(session.itemLink .. " -> " .. label .. " (teller ikke som loot)")
+  session.phase = "awarded"
+  NLC.Council.ClearRoll()
+  NLC.Council.AdvanceWizard()
+end
+
 function NLC.Council.AdvanceWizard()
   -- Search forward first, then wrap around to beginning
   for i = currentWizardIndex + 1, #activeSessions do
