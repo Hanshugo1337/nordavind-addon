@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NordavindLC Companion</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="header">
+    <h1>NordavindLC Companion</h1>
+    <div class="status">
+      <span id="status-text">Kobler til...</span>
+      <span class="dot" id="status-dot"></span>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="players">Spillere</div>
+    <div class="tab" data-tab="trades">Trades</div>
+    <div class="tab" data-tab="loot">Loot Log</div>
+    <div class="tab" data-tab="sync">Sync</div>
+  </div>
+
+  <div class="content">
+    <div id="tab-players">
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="playerName">Navn</th>
+            <th data-sort="baseScore">Score</th>
+            <th data-sort="attendance">Attend</th>
+            <th data-sort="wclParse">Parse</th>
+            <th data-sort="mplusEffort">M+</th>
+            <th data-sort="rank">Rank</th>
+            <th data-sort="lootThisWeek">Loot (uke)</th>
+            <th data-sort="lootTotal">Loot (total)</th>
+            <th data-sort="deathPenalty">Deaths</th>
+          </tr>
+        </thead>
+        <tbody id="players-body"></tbody>
+      </table>
+    </div>
+
+    <div id="tab-trades" style="display:none">
+      <div id="trades-list"></div>
+    </div>
+
+    <div id="tab-loot" style="display:none">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Spiller</th>
+            <th>Boss</th>
+            <th>Kategori</th>
+            <th>Tid</th>
+          </tr>
+        </thead>
+        <tbody id="loot-body"></tbody>
+      </table>
+    </div>
+
+    <div id="tab-sync" style="display:none">
+      <div class="sync-panel">
+        <div class="sync-card">
+          <h3>Sist synkronisert</h3>
+          <div class="value" id="sync-time">&mdash;</div>
+        </div>
+        <div class="sync-card">
+          <h3>Spillere</h3>
+          <div class="value" id="sync-players">0</div>
+        </div>
+        <div class="sync-card">
+          <h3>WoW-sti</h3>
+          <div class="value" id="sync-wow" style="font-size:13px">&mdash;</div>
+        </div>
+        <div class="sync-card">
+          <h3>Server</h3>
+          <div class="value" id="sync-url" style="font-size:13px">&mdash;</div>
+        </div>
+      </div>
+      <br>
+      <button class="btn" onclick="manualSync()">Synkroniser n&aring;</button>
+      <button class="btn" onclick="fullRecalc()" style="margin-left:8px;background:#5b9bd5">Full beregning (raid night)</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
