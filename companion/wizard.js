@@ -6,7 +6,8 @@ const { setConfig, detectWowPath, detectAccounts } = require("./config");
 
 function openWizard(onDone) {
   const win = new BrowserWindow({
-    width: 520, height: 560, resizable: false, autoHideMenuBar: true,
+    width: 520, height: 600, resizable: false, autoHideMenuBar: true,
+    icon: path.join(__dirname, "renderer", "logo.png"),
     webPreferences: { preload: path.join(__dirname, "wizard-preload.js"), contextIsolation: true },
   });
   win.loadFile(path.join(__dirname, "wizard.html"));

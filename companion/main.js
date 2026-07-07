@@ -14,6 +14,7 @@ function createStatusWindow() {
   if (statusWin) { statusWin.show(); return; }
   statusWin = new BrowserWindow({
     width: 900, height: 640, show: false, autoHideMenuBar: true,
+    icon: path.join(__dirname, "renderer", "logo.png"),
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true },
   });
   statusWin.loadFile(path.join(__dirname, "renderer", "index.html"));
@@ -23,18 +24,19 @@ function createStatusWindow() {
   statusWin.once("ready-to-show", () => statusWin.show());
 }
 
-function trayIcon(state) {
-  const color = state === "ok" ? "#33cc33" : state === "sync" ? "#f0c040" : "#ff3333";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="6" fill="${color}"/></svg>`;
-  return nativeImage.createFromDataURL("data:image/svg+xml;base64," + Buffer.from(svg).toString("base64"));
+function trayImage() {
+  return nativeImage
+    .createFromPath(path.join(__dirname, "renderer", "logo.png"))
+    .resize({ width: 16, height: 16 });
 }
 
+// Tray icon is the logo; sync status is conveyed via the tooltip (colour dot emoji).
 function updateTray() {
   if (!tray || !engine) return;
   const s = engine.getStatus();
-  const state = s.lastError ? "err" : s.connected ? "ok" : "sync";
-  tray.setImage(trayIcon(state));
-  tray.setToolTip(`NordavindLC — ${s.connected ? s.playerCount + " spillere" : "kobler til…"}`);
+  const dot = s.lastError ? "🔴" : s.connected ? "🟢" : "🟡";
+  const state = s.lastError ? "Feil" : s.connected ? `${s.playerCount} spillere` : "kobler til…";
+  tray.setToolTip(`${dot} NordavindLC — ${state}`);
 }
 
 function buildTrayMenu() {
@@ -63,7 +65,7 @@ function registerIpc() {
 }
 
 app.whenReady().then(() => {
-  tray = new Tray(trayIcon("sync"));
+  tray = new Tray(trayImage());
   tray.setContextMenu(buildTrayMenu());
   tray.on("click", createStatusWindow);
   registerIpc();
