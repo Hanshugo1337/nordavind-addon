@@ -103,6 +103,25 @@ function NLC.Utils.IsWarbound(itemLink)
   return false
 end
 
+-- Returns true if the item in (bag, slot) still has an active trade window
+-- (BoP looted within the "you may trade this item for the next N" period).
+-- Language-independent: matches the localized prefix of BIND_TRADE_TIME_REMAINING.
+function NLC.Utils.IsTradeableBagItem(bag, slot)
+  if not bag or not slot then return false end
+  local data = C_TooltipInfo and C_TooltipInfo.GetBagItem(bag, slot)
+  if not data or not data.lines then return false end
+  -- Build a plain-text match prefix from the global string (drop the %s tail).
+  local marker = _G.BIND_TRADE_TIME_REMAINING or "You may trade this item"
+  marker = marker:gsub("%%s.*$", ""):gsub("%s+$", "")
+  for _, line in ipairs(data.lines) do
+    local text = line.leftText or ""
+    if text:find(marker, 1, true) then
+      return true
+    end
+  end
+  return false
+end
+
 -- Armor type per class (for filtering council buttons)
 NLC.Utils.CLASS_ARMOR = {
   WARRIOR = "Plate", PALADIN = "Plate", DEATHKNIGHT = "Plate",
