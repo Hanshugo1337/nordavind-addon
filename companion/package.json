@@ -2,13 +2,17 @@
   "name": "nordavind-companion",
   "version": "2.0.0",
   "description": "NordavindLC Companion — localhost dashboard for loot council scoring",
-  "main": "index.js",
+  "main": "main.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "electron .",
     "test": "node --test"
   },
   "dependencies": {
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.3.9",
     "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
   }
 }
