@@ -87,3 +87,65 @@ function NLC.Theme.CreateSeparator(parent, yOffset)
   sep:SetColorTexture(0.788, 0.659, 0.298, 0.2)
   return sep
 end
+
+-- ============================================================
+-- Shared widgets for the loot distribution flow (Leveranse B)
+-- ============================================================
+
+-- Item-icon button with tooltip. Call :SetItem(link) to populate.
+function NLC.Theme.CreateItemIcon(parent, size)
+  size = size or 28
+  local btn = CreateFrame("Button", nil, parent)
+  btn:SetSize(size, size)
+  btn.tex = btn:CreateTexture(nil, "ARTWORK")
+  btn.tex:SetAllPoints()
+  btn.tex:SetTexCoord(0.07, 0.93, 0.07, 0.93) -- trim the default icon border
+  local border = btn:CreateTexture(nil, "BACKGROUND")
+  border:SetPoint("TOPLEFT", -1, 1)
+  border:SetPoint("BOTTOMRIGHT", 1, -1)
+  border:SetColorTexture(0.788, 0.659, 0.298, 0.5)
+  function btn:SetItem(itemLink)
+    self.itemLink = itemLink
+    local icon = itemLink and select(5, C_Item.GetItemInfoInstant(itemLink))
+    self.tex:SetTexture(icon or 134400) -- 134400 = default "?" icon
+  end
+  btn:SetScript("OnEnter", function(self)
+    if not self.itemLink then return end
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetHyperlink(self.itemLink)
+    GameTooltip:Show()
+  end)
+  btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  return btn
+end
+
+-- Small countdown badge. Call :SetSeconds(sec). Green >30m, orange >10m, red otherwise.
+function NLC.Theme.CreateTimerBadge(parent)
+  local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  function fs:SetSeconds(sec)
+    if not sec or sec <= 0 then
+      self:SetText(NLC.Theme.MUTED .. "—|r")
+      return
+    end
+    local h = math.floor(sec / 3600)
+    local m = math.floor((sec % 3600) / 60)
+    local label = (h > 0) and (h .. "t " .. m .. "m") or (m .. "m")
+    local color = (sec > 1800) and NLC.Theme.GREEN
+      or (sec > 600) and NLC.Theme.ORANGE
+      or NLC.Theme.RED
+    self:SetText(color .. label .. "|r")
+  end
+  return fs
+end
+
+-- Debounce helper shared by the live-refresh windows: cancels the previous timer with the
+-- same key and reschedules fn after delay.
+local _debounceTimers = {}
+function NLC.Theme.Debounce(key, delay, fn)
+  local t = _debounceTimers[key]
+  if t then t:Cancel() end
+  _debounceTimers[key] = C_Timer.NewTimer(delay, function()
+    _debounceTimers[key] = nil
+    fn()
+  end)
+end
