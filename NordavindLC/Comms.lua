@@ -98,6 +98,14 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
       NLC.Council.OnRollCallAck(sender)
     end
 
+  elseif msgType == "LOOT_REPORT" then
+    -- Distributed loot: each raider reports their own tradeable loot; only the
+    -- officer aggregates it into the Loot Detected panel.
+    if not NLC.isOfficer then return end
+    if NLC.Council.OnLootReport then
+      NLC.Council.OnLootReport(sender, data)
+    end
+
   elseif msgType == "VERSION_CHECK" then
     NLC.Comms.Send("VERSION_REPLY", NLC.version)
 

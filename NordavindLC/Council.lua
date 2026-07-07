@@ -458,3 +458,36 @@ function NLC.Council.OnRollCallAck(sender)
   local name = sender:match("^([^-]+)") or sender
   _rollCallAcks[name] = true
 end
+
+-- ============================================================
+-- Distributed loot aggregation (officer only)
+-- Each raider sends LOOT_REPORT after a boss; the officer collects reports over a
+-- short window and feeds the merged list into the existing Loot Detected panel.
+-- ============================================================
+local _agg = {}          -- itemKey -> item
+local _aggTimer = nil
+local _aggBoss = nil
+
+function NLC.Council.OnLootReport(sender, data)
+  if not NLC.isOfficer then return end
+  if not data or not data.items then return end
+  _aggBoss = data.boss or _aggBoss
+  for _, it in ipairs(data.items) do
+    -- Dedup across senders (an item can only be looted once). Client already
+    -- deduped by GUID, so itemId+looter is enough here.
+    local key = (it.itemId or 0) .. ":" .. (it.looter or sender)
+    if not _agg[key] then _agg[key] = it end
+  end
+  -- Open/extend a 5s collection window from the first report.
+  if _aggTimer then _aggTimer:Cancel() end
+  _aggTimer = C_Timer.NewTimer(5, function()
+    _aggTimer = nil
+    local items = {}
+    for _, it in pairs(_agg) do table.insert(items, it) end
+    _agg = {}
+    if #items > 0 then
+      NLC.LootDetection._setDetected(items)
+      NLC.UI.ShowLootDetected(items)
+    end
+  end)
+end
