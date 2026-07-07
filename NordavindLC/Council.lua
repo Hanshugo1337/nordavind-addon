@@ -147,6 +147,20 @@ function NLC.Council.OnInterestReceived(sender, sessionIdx, category, eqIlvl, ti
     class = class or "WARRIOR",
     note = (note and note ~= "") and note or nil,
   }
+
+  -- Live: if the wizard is open and this item is still in the ranking phase, rebuild the
+  -- ranking and re-render (debounced ~1s to avoid flicker when many respond at once).
+  if NLC.UI.IsWizardOpen and NLC.UI.IsWizardOpen() then
+    NLC.Theme.Debounce("wizard-refresh", 1.0, function()
+      local sessions = NLC.Council.GetActiveSessions()
+      local idx = NLC.Council.GetWizardIndex()
+      local cur = sessions[idx]
+      if cur and cur.phase == "ranking" then
+        cur.ranked = NLC.Council.BuildRanking(cur)
+        NLC.UI.ShowWizard(sessions, idx)
+      end
+    end)
+  end
 end
 
 function NLC.Council.OnRespond(sender)

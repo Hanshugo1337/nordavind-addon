@@ -458,3 +458,8 @@ function NLC.UI.HideWizard()
     if rankFrame.skipBtn then rankFrame.skipBtn:Hide() end
   end
 end
+
+-- True if the award wizard/ranking frame is currently visible.
+function NLC.UI.IsWizardOpen()
+  return rankFrame ~= nil and rankFrame:IsShown()
+end
