@@ -3,6 +3,12 @@
 
 let currentSort = { key: "baseScore", asc: false };
 
+// HTML-escape any interpolated value before it goes into innerHTML. Data originates from
+// WoW SavedVariables / the website API; escaping keeps a stray "<" from ever becoming markup.
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const RANKS = { raider: 1, backup: 1, trial: 1 };
+
 // ---- Tab switching ----
 document.querySelectorAll(".tab").forEach(tab => {
   tab.addEventListener("click", () => {
@@ -43,19 +49,22 @@ function renderPlayers(players) {
   });
 
   const tbody = document.getElementById("players-body");
-  tbody.innerHTML = sorted.map(p => `
+  tbody.innerHTML = sorted.map(p => {
+    const safeRank = RANKS[p.rank] ? p.rank : "trial";
+    return `
     <tr>
-      <td>${p.playerName}</td>
+      <td>${esc(p.playerName)}</td>
       <td class="score">${p.baseScore.toFixed(1)}</td>
-      <td>${p.attendance}%</td>
+      <td>${esc(p.attendance)}%</td>
       <td>${p.wclParse.toFixed(1)}</td>
-      <td>${p.mplusEffort}</td>
-      <td><span class="rank-${p.rank}">${p.rank}</span></td>
-      <td>${p.lootThisWeek}</td>
-      <td>${p.lootTotal}</td>
+      <td>${esc(p.mplusEffort)}</td>
+      <td><span class="rank-${safeRank}">${esc(p.rank)}</span></td>
+      <td>${esc(p.lootThisWeek)}</td>
+      <td>${esc(p.lootTotal)}</td>
       <td>${p.deathPenalty > 0 ? "-" + p.deathPenalty.toFixed(1) : "—"}</td>
     </tr>
-  `).join("");
+  `;
+  }).join("");
 }
 
 // ---- Trades ----
@@ -65,9 +74,9 @@ async function loadTrades() {
   if (trades.length === 0) { el.innerHTML = '<div class="empty">Ingen pending trades</div>'; return; }
   el.innerHTML = trades.map(t => `
     <div class="trade-row">
-      <span class="loot-item">${t.item || "?"}</span>
-      <span>→ ${t.awardedTo || "?"}</span>
-      <span style="color:#888">${t.category || ""}</span>
+      <span class="loot-item">${esc(t.item || "?")}</span>
+      <span>→ ${esc(t.awardedTo || "?")}</span>
+      <span style="color:#888">${esc(t.category || "")}</span>
     </div>
   `).join("");
 }
@@ -81,11 +90,11 @@ async function loadLoot() {
     const time = l.timestamp ? new Date(l.timestamp * 1000).toLocaleString("nb-NO") : "—";
     return `
       <tr>
-        <td class="loot-item">${l.item || "?"}</td>
-        <td>${l.awardedTo || "?"}</td>
-        <td>${l.boss || "?"}</td>
-        <td>${l.category || "?"}</td>
-        <td style="color:#888">${time}</td>
+        <td class="loot-item">${esc(l.item || "?")}</td>
+        <td>${esc(l.awardedTo || "?")}</td>
+        <td>${esc(l.boss || "?")}</td>
+        <td>${esc(l.category || "?")}</td>
+        <td style="color:#888">${esc(time)}</td>
       </tr>
     `;
   }).join("");
