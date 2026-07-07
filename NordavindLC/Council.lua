@@ -407,6 +407,28 @@ function NLC.Council.GetResponseCount(sessionIdx)
   return 0
 end
 
+-- Change a candidate's response category on the current wizard item, then rebuild + re-render.
+function NLC.Council.ChangeCategory(name, newCategory)
+  local session = activeSessions[currentWizardIndex]
+  if not session or not session.interests[name] then return end
+  session.interests[name].category = newCategory
+  session.ranked = NLC.Council.BuildRanking(session)
+  NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
+end
+
+-- Remove a candidate from the current wizard item's list, then rebuild + re-render.
+function NLC.Council.RemoveCandidate(name)
+  local session = activeSessions[currentWizardIndex]
+  if not session or not session.interests[name] then return end
+  session.interests[name] = nil
+  session.ranked = NLC.Council.BuildRanking(session)
+  NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
+end
+
+function NLC.Council.WhisperCandidate(name)
+  ChatFrame_SendTell(name)
+end
+
 function NLC.Council.GetWizardIndex()
   return currentWizardIndex
 end

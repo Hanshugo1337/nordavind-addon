@@ -241,6 +241,39 @@ function NLC.UI.ShowRanking(session, candidates)
     end)
     nameHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    -- Officer: right-click the name for the candidate context menu (generic Menu API).
+    if NLC.isOfficer then
+      nameHover:SetScript("OnMouseUp", function(self, button)
+        if button ~= "RightButton" or not MenuUtil then return end
+        MenuUtil.CreateContextMenu(self, function(_, root)
+          root:CreateTitle(c.name)
+          local catSub = root:CreateButton("Bytt kategori")
+          for _, cat in ipairs({ "upgrade", "catalyst", "offspec", "tmog" }) do
+            catSub:CreateButton(cat, function() NLC.Council.ChangeCategory(c.name, cat) end)
+          end
+          root:CreateButton("Omfordel award…", function()
+            local session = NLC.Council.GetActiveSessions()[NLC.Council.GetWizardIndex()]
+            if not session then return end
+            local entry = {
+              item = session.itemLink, itemId = session.itemId,
+              awardedTo = c.name, category = c.category, timestamp = time(),
+            }
+            NLC.UI.ShowEditPopup(entry, function(newRecipient, newCategory)
+              NLC.History.ApplyAwardEdit(entry, newRecipient, newCategory)
+            end)
+          end)
+          root:CreateButton("Fjern fra listen", function() NLC.Council.RemoveCandidate(c.name) end)
+          root:CreateDivider()
+          root:CreateButton("Hvisk " .. c.name, function() NLC.Council.WhisperCandidate(c.name) end)
+          root:CreateButton("Kopier navn", function()
+            local eb = ChatEdit_ChooseBoxForSend()
+            ChatEdit_ActivateChat(eb)
+            eb:SetText(c.name)
+          end)
+        end)
+      end)
+    end
+
     -- Score or Roll (gold, prominent)
     local scoreText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     scoreText:SetPoint("LEFT", COL.score, 0)
