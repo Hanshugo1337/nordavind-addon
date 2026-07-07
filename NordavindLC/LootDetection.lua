@@ -1,49 +1,64 @@
 -- LootDetection.lua
--- Detect loot drops from boss kills.
+-- Distributed loot capture for Midnight (patch 12.0).
 --
--- Detection flow:
---   ENCOUNTER_END (success) fires when the boss dies — BEFORE loot is distributed.
---   With Group Loot, START_LOOT_ROLL fires a second or two later for each dropped
---   item — this is the FIRST event that names the loot, so we capture items here.
---   ENCOUNTER_LOOT_RECEIVED and CHAT_MSG_LOOT only fire once the rolls resolve
---   (often past the window); we still listen to them as a fallback / for looter info.
+-- Why distributed: in 12.0 the officer's single client no longer sees all loot
+-- (START_LOOT_ROLL only fires for items the officer can roll on; ENCOUNTER_LOOT_RECEIVED
+-- is unreliable; loot lands after combat; addon comms are blocked during encounters).
+-- So each raider captures their OWN tradeable looted items locally and reports them to
+-- the officer after the fight.
 --
--- So we must NOT flush on ENCOUNTER_END. Instead, we set waitingForLoot=true and
--- let incoming roll/loot events add items directly to droppedItems while the timer runs.
--- After 8s we show whatever arrived.
+-- Capture model: after ENCOUNTER_END (success) we open a short collection window and scan
+-- the player's bags for items that still carry a trade timer (BoP looted within the trade
+-- window) and pass shouldTrackItem. Items are deduped by item GUID so each physical item is
+-- reported once per session. BAG_UPDATE_DELAYED re-scans while the window is open so late
+-- loot is caught without a fixed guess.
 --
--- waitingForLoot:  true from ENCOUNTER_END success until showIfAny fires.
--- collectingLoot:  true during an active encounter (ENCOUNTER_START → ENCOUNTER_END),
---                  used only to guard against chat messages from before the pull.
+-- Send model: reports go out via NLC.Comms only when addon comms are NOT restricted
+-- (ADDON_RESTRICTION_STATE_CHANGED / C_RestrictedActions). If comms are blocked when the
+-- window closes, the report is held and flushed the moment the restriction lifts.
+--
+-- Officer aggregation of LOOT_REPORT lives in Comms.lua; it feeds detectedItems here via
+-- _setDetected so the existing "Loot Detected" panel (GetDroppedItems/RemoveItem) is unchanged.
+--
+-- Technique reference only (RCLootCouncil): which WoW APIs exist in 12.0. No RC code,
+-- names, structure or text.
 
 local NLC = NordavindLC_NS
 
 local lootFrame = CreateFrame("Frame")
 local isRegistered = false
 
+local currentBoss = nil
+local reportItems = {}       -- tradeable items THIS client looted, awaiting send
+local reportedGUIDs = {}     -- session-wide dedup: itemGUID -> true
+local detectedItems = {}     -- aggregated list on the officer (shown in the panel)
+local collecting = false     -- true while the post-combat collection window is open
+local collectTimer = nil
+local commsRestricted = false -- true when addon comms are blocked (encounter/challenge)
+local pendingSend = false    -- true if a report is waiting for the restriction to lift
+local debugMode = false
+
 function NLC.LootDetection.Register()
   if isRegistered then return end
   lootFrame:RegisterEvent("ENCOUNTER_START")
   lootFrame:RegisterEvent("ENCOUNTER_END")
-  lootFrame:RegisterEvent("ENCOUNTER_LOOT_RECEIVED")
-  lootFrame:RegisterEvent("START_LOOT_ROLL")
-  lootFrame:RegisterEvent("CHAT_MSG_LOOT")
+  lootFrame:RegisterEvent("START_LOOT_ROLL") -- auto-roll only
+  -- New 12.0 event; guard so an older client can't error on RegisterEvent.
+  pcall(function() lootFrame:RegisterEvent("ADDON_RESTRICTION_STATE_CHANGED") end)
   isRegistered = true
+  -- Fresh session state
+  reportItems = {}
+  reportedGUIDs = {}
+  pendingSend = false
 end
 
 function NLC.LootDetection.Unregister()
   lootFrame:UnregisterAllEvents()
   isRegistered = false
+  collecting = false
+  pendingSend = false
+  if collectTimer then collectTimer:Cancel(); collectTimer = nil end
 end
-
-local currentBoss = nil
-local droppedItems = {}
-local collectingLoot = false  -- true during pull (ENCOUNTER_START → ENCOUNTER_END)
-local waitingForLoot = false  -- true after ENCOUNTER_END success, until showIfAny
-local seenItems = {}          -- dedup by itemID
-local collectTimer = nil
-
-local debugMode = false
 
 local EXCLUDED_TYPES = {
   ["Miscellaneous"] = true,
@@ -76,117 +91,118 @@ local function shouldTrackItem(itemLink, itemID)
   return true, ilvl or 0, equipLoc or ""
 end
 
-local function showIfAny()
-  waitingForLoot = false
-  collectTimer = nil
-  if NLC.isOfficer and #droppedItems > 0 then
-    NLC.UI.ShowLootDetected(droppedItems)
+-- True if addon comms are currently blocked. Defensive: if the 12.0 restriction API/enum
+-- is missing, returns false (send normally — the encounter restriction lifts at
+-- ENCOUNTER_END anyway, so this degrades to the old behaviour safely).
+local function commsAreRestricted()
+  local E = Enum and Enum.AddOnRestrictionType
+  if not (E and C_RestrictedActions and C_RestrictedActions.IsAddOnRestrictionActive) then
+    return false
+  end
+  local function active(t) return t ~= nil and C_RestrictedActions.IsAddOnRestrictionActive(t) or false end
+  return active(E.Encounter) or active(E.ChallengeMode) or false
+end
+
+-- Scan all bags for newly-looted tradeable items and add them to reportItems.
+function NLC.LootDetection.ScanBags()
+  for bag = 0, 4 do
+    local slots = C_Container.GetContainerNumSlots(bag) or 0
+    for slot = 1, slots do
+      local link = C_Container.GetContainerItemLink(bag, slot)
+      if link and NLC.Utils.IsTradeableBagItem(bag, slot) then
+        local loc = ItemLocation:CreateFromBagAndSlot(bag, slot)
+        local guid = C_Item.DoesItemExist(loc) and C_Item.GetItemGUID(loc)
+        if guid and not reportedGUIDs[guid] then
+          local itemID = C_Item.GetItemInfoInstant(link)
+          local track, ilvl, equipLoc, armorType = shouldTrackItem(link, itemID)
+          if track then
+            reportedGUIDs[guid] = true
+            table.insert(reportItems, {
+              itemLink = link,
+              itemId = itemID,
+              ilvl = ilvl or 0,
+              equipLoc = equipLoc,
+              armorType = armorType,
+              boss = currentBoss,
+              looter = UnitName("player"),
+            })
+            dbg("Rapport +: " .. link)
+          end
+        end
+      end
+    end
   end
 end
 
-local function tryAddItem(link, itemID, boss, looter, retries)
-  local track, ilvl, equipLoc, armorType = shouldTrackItem(link, itemID)
-  if track == nil and retries > 0 then
-    C_Timer.After(0.5, function() tryAddItem(link, itemID, boss, looter, retries - 1) end)
+-- Send the collected report if comms allow; otherwise hold and flush when the restriction lifts.
+function NLC.LootDetection.TrySendReport()
+  if #reportItems == 0 then
+    pendingSend = false
+    dbg("Ingen tradeable items å rapportere.")
     return
   end
-  if track then
-    table.insert(droppedItems, {
-      itemLink = link,
-      itemId = itemID,
-      ilvl = ilvl or 0,
-      equipLoc = equipLoc,
-      armorType = armorType,
-      boss = boss,
-      looter = looter,
-    })
-    dbg("Added: " .. link .. " (looter: " .. (looter or "?") .. ")")
+  if commsRestricted then
+    pendingSend = true
+    dbg("Comms blokkert — venter på at restriksjon løftes (" .. #reportItems .. " items).")
+    return
   end
-end
-
-local function resetState()
-  droppedItems = {}
-  seenItems = {}
-  collectingLoot = false
-  waitingForLoot = false
-  if collectTimer then collectTimer:Cancel(); collectTimer = nil end
+  NLC.Comms.Send("LOOT_REPORT", { boss = currentBoss, items = reportItems })
+  dbg("Sendte LOOT_REPORT: " .. #reportItems .. " items")
+  reportItems = {}
+  pendingSend = false
 end
 
 lootFrame:SetScript("OnEvent", function(self, event, ...)
+  -- ADDON_RESTRICTION_STATE_CHANGED must be handled even outside active councils so a held
+  -- report can flush; but reportItems is only ever populated while active, so gating the
+  -- rest on NLC.active is fine.
+  if event == "ADDON_RESTRICTION_STATE_CHANGED" then
+    commsRestricted = commsAreRestricted()
+    dbg("Comms-restriksjon: " .. tostring(commsRestricted))
+    if not commsRestricted and pendingSend then
+      NLC.LootDetection.TrySendReport()
+    end
+    return
+  end
+
   if not NLC.active then return end
 
   if event == "ENCOUNTER_START" then
     local encounterID, name = ...
     currentBoss = name or "Unknown Boss"
-    resetState()
-    collectingLoot = true
     dbg("ENCOUNTER_START: " .. currentBoss)
 
   elseif event == "ENCOUNTER_END" then
     local encounterID, name, difficultyID, groupSize, success = ...
-    dbg(string.format("ENCOUNTER_END: %s | success=%s (%s)", tostring(name), tostring(success), type(success)))
+    dbg(string.format("ENCOUNTER_END: %s | success=%s", tostring(name), tostring(success)))
+    if name then currentBoss = name end
     if not (success == 1 or success == true) then
-      resetState()
-      dbg("Encounter failed, resetting.")
+      dbg("Encounter feilet, ingen innsamling.")
       return
     end
-    if name then currentBoss = name end
-    collectingLoot = false
-    -- NOTE: do NOT flush here — loot arrives AFTER ENCOUNTER_END.
-    -- Set waitingForLoot so incoming ELR/chat events add directly to droppedItems.
-    waitingForLoot = true
+    -- Open the collection window: scan now, scan again on each BAG_UPDATE_DELAYED,
+    -- close after 12s and attempt to send.
+    commsRestricted = commsAreRestricted()
+    collecting = true
+    NLC.LootDetection.ScanBags()
+    lootFrame:RegisterEvent("BAG_UPDATE_DELAYED")
     if collectTimer then collectTimer:Cancel() end
-    collectTimer = C_Timer.NewTimer(8, showIfAny)
-    dbg("Encounter success, waiting 8s for loot events.")
+    collectTimer = C_Timer.NewTimer(12, function()
+      collectTimer = nil
+      collecting = false
+      lootFrame:UnregisterEvent("BAG_UPDATE_DELAYED")
+      NLC.LootDetection.TrySendReport()
+    end)
+    dbg("ENCOUNTER_END success, samler loot (maks 12s).")
 
-  elseif event == "ENCOUNTER_LOOT_RECEIVED" then
-    local encounterID, itemID, itemLink, quantity, playerName, className = ...
-    dbg(string.format("ENCOUNTER_LOOT_RECEIVED: id=%s player=%s link=%s", tostring(itemID), tostring(playerName), tostring(itemLink)))
-    if not itemID or not itemLink then return end
-    if waitingForLoot and not seenItems[itemID] then
-      seenItems[itemID] = true
-      tryAddItem(itemLink, itemID, currentBoss, playerName, 5)
-    end
-    -- Update looter on already-added items
-    for _, item in ipairs(droppedItems) do
-      if item.itemId == itemID and not item.looter then
-        item.looter = playerName
-        break
-      end
-    end
-
-  elseif event == "CHAT_MSG_LOOT" then
-    if not NLC.isOfficer then return end
-    local text = ...
-    dbg("CHAT_MSG_LOOT: " .. (text or "nil"))
-    -- Only process during the post-ENCOUNTER_END loot window
-    if not waitingForLoot then return end
-    for link in text:gmatch("|c%x+|Hitem:[^|]+|h%[.-%]|h|r") do
-      local itemID = C_Item.GetItemInfoInstant(link)
-      if itemID and not seenItems[itemID] then
-        seenItems[itemID] = true
-        tryAddItem(link, itemID, currentBoss, nil, 5)
-      end
-    end
+  elseif event == "BAG_UPDATE_DELAYED" then
+    if collecting then NLC.LootDetection.ScanBags() end
 
   elseif event == "START_LOOT_ROLL" then
+    -- Auto-roll behaviour only; capture happens via ScanBags now.
     local rollID = ...
     if not rollID then return end
     local link = GetLootRollItemLink(rollID)
-
-    -- Group Loot: START_LOOT_ROLL is the FIRST event that names a dropped item.
-    -- ENCOUNTER_LOOT_RECEIVED / CHAT_MSG_LOOT only fire once the need/greed rolls
-    -- resolve — usually long after the 8s window closes — so with Group Loot the
-    -- council panel never had any items. Capture the item here instead.
-    if waitingForLoot and link then
-      local itemID = C_Item.GetItemInfoInstant(link)
-      if itemID and not seenItems[itemID] then
-        seenItems[itemID] = true
-        tryAddItem(link, itemID, currentBoss, nil, 5)
-        dbg("START_LOOT_ROLL captured: " .. link)
-      end
-    end
-
     local isLeader = UnitIsGroupLeader("player")
     if isLeader then
       RollOnLoot(rollID, 1)
@@ -203,12 +219,26 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
   end
 end)
 
+-- ============================================================
+-- Client report (this player's captured loot)
+-- ============================================================
+function NLC.LootDetection.GetReport()
+  return reportItems
+end
+
+-- ============================================================
+-- Officer panel (aggregated list, set by Comms.OnLootReport)
+-- ============================================================
+function NLC.LootDetection._setDetected(items)
+  detectedItems = items
+end
+
 function NLC.LootDetection.GetDroppedItems()
-  return droppedItems
+  return detectedItems
 end
 
 function NLC.LootDetection.RemoveItem(index)
-  table.remove(droppedItems, index)
+  table.remove(detectedItems, index)
 end
 
 function NLC.LootDetection.GetCurrentBoss()
@@ -219,9 +249,9 @@ function NLC.LootDetection.ToggleDebug()
   debugMode = not debugMode
   NLC.Utils.Print("Loot debug: " .. (debugMode and "|cff00ff00PÅ|r" or "|cffff0000AV|r"))
   if debugMode then
-    NLC.Utils.Print("  collectingLoot=" .. tostring(collectingLoot))
-    NLC.Utils.Print("  waitingForLoot=" .. tostring(waitingForLoot))
     NLC.Utils.Print("  currentBoss=" .. tostring(currentBoss))
-    NLC.Utils.Print("  droppedItems=" .. #droppedItems)
+    NLC.Utils.Print("  reportItems=" .. #reportItems)
+    NLC.Utils.Print("  commsRestricted=" .. tostring(commsRestricted))
+    NLC.Utils.Print("  collecting=" .. tostring(collecting))
   end
 end
