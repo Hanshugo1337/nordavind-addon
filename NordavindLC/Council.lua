@@ -396,6 +396,17 @@ function NLC.Council.GetActiveSessions()
   return activeSessions
 end
 
+-- Number of raiders who have responded on a given item (officer only — interests are
+-- only populated on the officer's client).
+function NLC.Council.GetResponseCount(sessionIdx)
+  for _, s in ipairs(activeSessions) do
+    if s.sessionIdx == sessionIdx then
+      return NLC.Utils.TableCount(s.interests)
+    end
+  end
+  return 0
+end
+
 function NLC.Council.GetWizardIndex()
   return currentWizardIndex
 end

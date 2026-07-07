@@ -108,6 +108,13 @@ local function createItemRow(parent, index, item)
 
   local rowData = { buttons = {}, noteBox = nil, selection = nil, noteText = "" }
 
+  -- Officer: live per-item response counter (updated by the popup ticker).
+  if NLC.isOfficer then
+    rowData.respFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    rowData.respFS:SetPoint("TOPRIGHT", -12, -8)
+    rowData.respFS:SetText(T.MUTED .. NLC.Council.GetResponseCount(item.sessionIdx) .. " svar|r")
+  end
+
   if #categories == 0 then
     local noUse = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     noUse:SetPoint("TOPLEFT", 12, -52)
@@ -282,6 +289,15 @@ function NLC.UI.ShowMultiItemPopup(sessions, timer)
     end
     local color = remaining <= 10 and T.RED or remaining <= 30 and T.ORANGE or T.GOLD
     multiFrame.timerText:SetText(color .. remaining .. "s|r")
+    -- Live per-item response counter (officer only)
+    if NLC.isOfficer then
+      for _, session in ipairs(sessions) do
+        local rd = itemRows[session.sessionIdx]
+        if rd and rd.respFS then
+          rd.respFS:SetText(T.MUTED .. NLC.Council.GetResponseCount(session.sessionIdx) .. " svar|r")
+        end
+      end
+    end
   end, timer)
 end
 
@@ -310,7 +326,7 @@ local function refreshLootPanel(items)
   end
 
   local count = #items
-  local ROW_H = 42
+  local ROW_H = 44
   lootPanel:SetHeight(110 + count * ROW_H)
 
   if count == 0 then
@@ -340,16 +356,28 @@ local function refreshLootPanel(items)
     row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
     row:Show()
 
-    -- Item text
+    -- Item icon
+    local icon = T.CreateItemIcon(row, 32)
+    icon:SetPoint("LEFT", 8, 0)
+    icon:SetItem(item.itemLink)
+
+    -- Item text (shifted right of the icon)
     local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    text:SetPoint("LEFT", 12, 0)
-    text:SetWidth(360)
+    text:SetPoint("LEFT", 46, 6)
+    text:SetWidth(330)
     text:SetJustifyH("LEFT")
     local itemLabel = (item.itemLink or "?") .. "  " .. T.MUTED .. "(ilvl " .. (item.ilvl or 0) .. ")|r"
     if item.armorType then
       itemLabel = itemLabel .. "  " .. T.GOLD_DIM .. "[" .. item.armorType .. "]|r"
     end
     text:SetText(itemLabel)
+
+    -- Looter name (under the item text)
+    if item.looter then
+      local looterText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+      looterText:SetPoint("LEFT", 46, -10)
+      looterText:SetText(T.MUTED .. "looted av " .. item.looter .. "|r")
+    end
 
     -- Remove button (X)
     local removeBtn = CreateFrame("Button", nil, row, "UIPanelCloseButtonNoScripts")
