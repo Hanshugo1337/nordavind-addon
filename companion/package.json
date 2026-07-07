@@ -10,8 +10,7 @@
   },
   "dependencies": {
     "electron-store": "^8.2.0",
-    "electron-updater": "^6.3.9",
-    "express": "^4.21.0"
+    "electron-updater": "^6.3.9"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -20,9 +19,15 @@
   "build": {
     "appId": "cc.nordavind.companion",
     "productName": "NordavindLC Companion",
-    "win": { "target": "nsis" },
+    "win": {
+      "target": "nsis"
+    },
     "publish": [
-      { "provider": "github", "owner": "Hanshugo1337", "repo": "nordavind-addon" }
+      {
+        "provider": "github",
+        "owner": "Hanshugo1337",
+        "repo": "nordavind-addon"
+      }
     ],
     "files": [
       "main.js",
