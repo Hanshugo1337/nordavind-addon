@@ -65,22 +65,27 @@ local function createItemRow(parent, index, item)
   bg:SetAllPoints()
   bg:SetColorTexture(1, 1, 1, index % 2 == 0 and 0.04 or 0)
 
+  -- Item icon (mockup: icon per row)
+  local icon = T.CreateItemIcon(row, 32)
+  icon:SetPoint("TOPLEFT", 8, -6)
+  icon:SetItem(item.itemLink)
+
   -- Invisible overlay for item tooltip on hover
   local itemHover = CreateFrame("Frame", nil, row)
-  itemHover:SetSize(ITEM_ROW_WIDTH - 24, 18)
-  itemHover:SetPoint("TOPLEFT", 12, -6)
+  itemHover:SetSize(ITEM_ROW_WIDTH - 58, 18)
+  itemHover:SetPoint("TOPLEFT", 46, -6)
   if item.itemLink then AddItemTooltip(itemHover, item.itemLink) end
 
   local itemText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  itemText:SetPoint("TOPLEFT", 12, -8)
-  itemText:SetWidth(ITEM_ROW_WIDTH - 24)
+  itemText:SetPoint("TOPLEFT", 46, -8)
+  itemText:SetWidth(ITEM_ROW_WIDTH - 58)
   itemText:SetJustifyH("LEFT")
   itemText:SetText((item.itemLink or "?") .. "  " .. T.MUTED .. "ilvl " .. (item.ilvl or 0) .. "|r")
 
   local eqLink, eqIlvl = NLC.Utils.GetEquippedInfo(item.equipLoc or "")
   local eqText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  eqText:SetPoint("TOPLEFT", 12, -26)
-  eqText:SetWidth(ITEM_ROW_WIDTH - 24)
+  eqText:SetPoint("TOPLEFT", 46, -26)
+  eqText:SetWidth(ITEM_ROW_WIDTH - 58)
   eqText:SetJustifyH("LEFT")
   if eqLink then
     local diff = (item.ilvl or 0) - eqIlvl

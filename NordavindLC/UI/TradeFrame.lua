@@ -223,6 +223,22 @@ local function refreshTradeFrame()
     badge:SetPoint("RIGHT", -200, 8)
     badge:SetSeconds(entry._tradeSec)
 
+    -- Distance indicator (mockup: "I nærheten" / "For langt")
+    local distText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    distText:SetPoint("RIGHT", -200, -8)
+    local unit = nil
+    if IsInRaid() then
+      for r = 1, GetNumGroupMembers() do
+        local n = GetRaidRosterInfo(r)
+        if n and (n:match("^([^-]+)") or n) == entry.awardedTo then unit = "raid" .. r; break end
+      end
+    end
+    if unit and CheckInteractDistance(unit, 2) then
+      distText:SetText(T.GREEN .. "• I nærheten|r")
+    elseif unit then
+      distText:SetText(T.MUTED .. "• For langt|r")
+    end
+
     -- Trade button
     local tradeBtn = T.CreateButton(row, 80, 32, T.GREEN .. "Trade|r")
     tradeBtn:SetPoint("RIGHT", -12, 0)
