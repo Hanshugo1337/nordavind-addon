@@ -22,7 +22,11 @@ class ApiClient {
       body: JSON.stringify({ item, awardedTo, awardedBy, boss, timestamp }),
       signal: AbortSignal.timeout(10000),
     });
-    if (!res.ok) throw new Error(`Award failed: ${res.status} ${await res.text()}`);
+    if (!res.ok) {
+      const err = new Error(`Award failed: ${res.status} ${await res.text()}`);
+      err.status = res.status;
+      throw err;
+    }
     return res.json();
   }
 
@@ -33,7 +37,11 @@ class ApiClient {
       body: JSON.stringify({ originalTimestamp, item, newAwardedTo, newCategory }),
       signal: AbortSignal.timeout(10000),
     });
-    if (!res.ok) throw new Error(`Edit failed: ${res.status} ${await res.text()}`);
+    if (!res.ok) {
+      const err = new Error(`Edit failed: ${res.status} ${await res.text()}`);
+      err.status = res.status;
+      throw err;
+    }
     return res.json();
   }
 }

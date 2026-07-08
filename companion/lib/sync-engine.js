@@ -68,6 +68,13 @@ class SyncEngine {
     }
   }
 
+  // A permanent client error (4xx, e.g. 404 "Character not found") will never succeed on
+  // retry, so skip past it — otherwise it jams the whole queue forever. Transient errors
+  // (network/5xx) still break so the batch retries next cycle.
+  _isPermanent(err) {
+    return typeof err.status === "number" && err.status >= 400 && err.status < 500;
+  }
+
   async _processExports() {
     try {
       for (const award of this.watcher.checkPendingExports()) {
@@ -77,8 +84,13 @@ class SyncEngine {
           console.log(`[export] Synced: ${award.item} -> ${award.awardedTo}`);
         } catch (err) {
           this.lastError = err.message;
+          if (this._isPermanent(err)) {
+            console.warn(`[export] Skipping permanently-failing award: ${award.item} -> ${award.awardedTo} (${err.message})`);
+            this.watcher.markExportSent(); // advance past the dead entry
+            continue;
+          }
           console.error(`[export] Failed: ${award.item} ->`, err.message);
-          break; // stop and retry next cycle
+          break; // transient — stop and retry next cycle
         }
       }
     } catch { /* file not ready yet */ }
@@ -93,6 +105,11 @@ class SyncEngine {
           console.log(`[edit] Synced: ${edit.item} -> ${edit.newAwardedTo} (${edit.newCategory})`);
         } catch (err) {
           this.lastError = err.message;
+          if (this._isPermanent(err)) {
+            console.warn(`[edit] Skipping permanently-failing edit: ${edit.item} -> ${edit.newAwardedTo} (${err.message})`);
+            this.watcher.markEditSent(); // advance past the dead entry
+            continue;
+          }
           console.error(`[edit] Failed: ${edit.item} ->`, err.message);
           break;
         }
