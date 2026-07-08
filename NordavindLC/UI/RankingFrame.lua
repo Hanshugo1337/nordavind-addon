@@ -114,13 +114,12 @@ function NLC.UI.ShowRanking(session, candidates)
     rankFrame.specialBtn = T.CreateButton(rankFrame, 120, 34, "Annet")
     rankFrame.specialBtn:SetPoint("BOTTOMLEFT", 190, 16)
     rankFrame.specialBtn:SetScript("OnClick", function(self)
-      if not MenuUtil then return end
-      MenuUtil.CreateContextMenu(self, function(_, root)
-        root:CreateTitle("Send item til")
-        root:CreateButton("Disenchant", function() NLC.Council.AwardSpecial("disenchant") end)
-        root:CreateButton("Guild Bank", function() NLC.Council.AwardSpecial("bank") end)
-        root:CreateButton("Free (gratis)", function() NLC.Council.AwardSpecial("free") end)
-      end)
+      T.ShowMenu(self, {
+        { title = true, text = "Send item til" },
+        { text = "Disenchant", func = function() NLC.Council.AwardSpecial("disenchant") end },
+        { text = "Guild Bank", func = function() NLC.Council.AwardSpecial("bank") end },
+        { text = "Free (gratis)", func = function() NLC.Council.AwardSpecial("free") end },
+      })
     end)
 
     rankFrame.closeBtn = T.CreateButton(rankFrame, 120, 34, "Close")
@@ -257,42 +256,45 @@ function NLC.UI.ShowRanking(session, candidates)
     end)
     nameHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Officer: right-click the name for the candidate context menu (generic Menu API).
+    -- Officer: click the name (left or right) to open the candidate menu. A visible "▾"
+    -- after the name signals it's interactive. Uses our own dropdown (MenuUtil was unreliable).
     if NLC.isOfficer then
-      nameHover:SetScript("OnMouseUp", function(self, button)
-        if button ~= "RightButton" or not MenuUtil then return end
-        MenuUtil.CreateContextMenu(self, function(_, root)
-          root:CreateTitle(c.name)
-          root:CreateButton("Legg til i roll", function() NLC.Council.AddToRoll(c.name) end)
-          if #NLC.Council.GetRollState().names >= 2 then
-            root:CreateButton("Start roll (" .. #NLC.Council.GetRollState().names .. ")", function()
-              NLC.Council.StartRoll()
-            end)
-          end
-          local catSub = root:CreateButton("Bytt kategori")
-          for _, cat in ipairs({ "upgrade", "catalyst", "offspec", "tmog" }) do
-            catSub:CreateButton(cat, function() NLC.Council.ChangeCategory(c.name, cat) end)
-          end
-          root:CreateButton("Omfordel award…", function()
-            local session = NLC.Council.GetActiveSessions()[NLC.Council.GetWizardIndex()]
-            if not session then return end
-            local entry = {
-              item = session.itemLink, itemId = session.itemId,
-              awardedTo = c.name, category = c.category, timestamp = time(),
-            }
-            NLC.UI.ShowEditPopup(entry, function(newRecipient, newCategory)
-              NLC.History.ApplyAwardEdit(entry, newRecipient, newCategory)
-            end)
+      nameText:SetText((nameText:GetText() or "") .. "  " .. T.GOLD_DIM .. "▾|r")
+      nameHover:SetScript("OnMouseUp", function(self)
+        local roll = NLC.Council.GetRollState()
+        local items = {
+          { title = true, text = c.name },
+          { text = "Legg til i roll", func = function() NLC.Council.AddToRoll(c.name) end },
+        }
+        if #roll.names >= 2 then
+          table.insert(items, { text = "Start roll (" .. #roll.names .. ")", color = T.GOLD_LIGHT,
+            func = function() NLC.Council.StartRoll() end })
+        end
+        table.insert(items, { divider = true })
+        table.insert(items, { title = true, text = "Bytt kategori" })
+        for _, cat in ipairs({ "upgrade", "catalyst", "offspec", "tmog" }) do
+          table.insert(items, { text = "   " .. cat, func = function() NLC.Council.ChangeCategory(c.name, cat) end })
+        end
+        table.insert(items, { divider = true })
+        table.insert(items, { text = "Omfordel award…", func = function()
+          local session = NLC.Council.GetActiveSessions()[NLC.Council.GetWizardIndex()]
+          if not session then return end
+          local entry = { item = session.itemLink, itemId = session.itemId,
+            awardedTo = c.name, category = c.category, timestamp = time() }
+          NLC.UI.ShowEditPopup(entry, function(newRecipient, newCategory)
+            NLC.History.ApplyAwardEdit(entry, newRecipient, newCategory)
           end)
-          root:CreateButton("Fjern fra listen", function() NLC.Council.RemoveCandidate(c.name) end)
-          root:CreateDivider()
-          root:CreateButton("Hvisk " .. c.name, function() NLC.Council.WhisperCandidate(c.name) end)
-          root:CreateButton("Kopier navn", function()
-            local eb = ChatEdit_ChooseBoxForSend()
-            ChatEdit_ActivateChat(eb)
-            eb:SetText(c.name)
-          end)
-        end)
+        end })
+        table.insert(items, { text = "Fjern fra listen", color = T.RED,
+          func = function() NLC.Council.RemoveCandidate(c.name) end })
+        table.insert(items, { divider = true })
+        table.insert(items, { text = "Hvisk " .. c.name, func = function() NLC.Council.WhisperCandidate(c.name) end })
+        table.insert(items, { text = "Kopier navn", func = function()
+          local eb = ChatEdit_ChooseBoxForSend()
+          ChatEdit_ActivateChat(eb)
+          eb:SetText(c.name)
+        end })
+        T.ShowMenu(self, items)
       end)
     end
 

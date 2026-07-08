@@ -149,3 +149,97 @@ function NLC.Theme.Debounce(key, delay, fn)
     fn()
   end)
 end
+
+-- Reliable custom dropdown menu built from plain frames — no MenuUtil/UIDropDownMenu (those
+-- proved unreliable in-game). items = array of { text, func, color, title=bool, divider=bool }.
+local _menu, _menuCloser
+function NLC.Theme.ShowMenu(anchor, items)
+  if not _menu then
+    _menuCloser = CreateFrame("Button", nil, UIParent)
+    _menuCloser:SetAllPoints(UIParent)
+    _menuCloser:SetFrameStrata("FULLSCREEN_DIALOG")
+    _menuCloser:SetFrameLevel(1)
+    _menuCloser:RegisterForClicks("AnyUp")
+    _menuCloser:Hide()
+
+    _menu = CreateFrame("Frame", "NordavindLCMenu", UIParent, "BackdropTemplate")
+    _menu:SetFrameStrata("FULLSCREEN_DIALOG")
+    _menu:SetFrameLevel(20)
+    _menu:EnableMouse(true) -- eat clicks on the menu body so padding-clicks don't close it
+    NLC.Theme.ApplyBackdrop(_menu)
+    _menu.rows = {}
+    _menu:Hide()
+
+    local function closeMenu() _menu:Hide(); _menuCloser:Hide() end
+    _menuCloser:SetScript("OnClick", closeMenu)
+    _menu.Close = closeMenu
+  end
+
+  for _, r in ipairs(_menu.rows) do r:Hide() end
+
+  local WIDTH, ITEM_H, PAD = 172, 22, 6
+  local y = -PAD
+  for i, item in ipairs(items) do
+    local row = _menu.rows[i]
+    if not row then
+      row = CreateFrame("Button", nil, _menu)
+      row:SetPoint("TOPLEFT", 4, 0) -- y set per-show below
+      row.text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+      row.text:SetPoint("LEFT", 10, 0)
+      row.text:SetJustifyH("LEFT")
+      row.hl = row:CreateTexture(nil, "BACKGROUND")
+      row.hl:SetAllPoints()
+      row.hl:SetColorTexture(0.788, 0.659, 0.298, 0.15)
+      row.hl:Hide()
+      row.line = row:CreateTexture(nil, "ARTWORK")
+      row.line:SetHeight(1)
+      row.line:SetPoint("LEFT", 8, 0)
+      row.line:SetPoint("RIGHT", -8, 0)
+      row.line:SetColorTexture(0.788, 0.659, 0.298, 0.25)
+      row.line:Hide()
+      row:SetScript("OnEnter", function(self) if self._clickable then self.hl:Show() end end)
+      row:SetScript("OnLeave", function(self) self.hl:Hide() end)
+      _menu.rows[i] = row
+    end
+    row:SetWidth(WIDTH - 8)
+    row:SetFrameLevel(_menu:GetFrameLevel() + 1)
+    row:ClearAllPoints()
+    row:SetPoint("TOPLEFT", 4, y)
+    row.hl:Hide()
+    row.line:Hide()
+
+    if item.divider then
+      row.text:SetText("")
+      row._clickable = false
+      row:EnableMouse(false)
+      row:SetScript("OnClick", nil)
+      row:SetHeight(7)
+      row.line:Show()
+      y = y - 7
+    elseif item.title then
+      row.text:SetText(NLC.Theme.GOLD .. (item.text or "") .. "|r")
+      row._clickable = false
+      row:EnableMouse(false)
+      row:SetScript("OnClick", nil)
+      row:SetHeight(ITEM_H)
+      y = y - ITEM_H
+    else
+      row.text:SetText((item.color or NLC.Theme.WHITE) .. (item.text or "") .. "|r")
+      row._clickable = true
+      row:EnableMouse(true)
+      row:SetScript("OnClick", function()
+        _menu.Close()
+        if item.func then item.func() end
+      end)
+      row:SetHeight(ITEM_H)
+      y = y - ITEM_H
+    end
+    row:Show()
+  end
+
+  _menu:SetSize(WIDTH, -y + PAD)
+  _menu:ClearAllPoints()
+  _menu:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+  _menuCloser:Show()
+  _menu:Show()
+end
