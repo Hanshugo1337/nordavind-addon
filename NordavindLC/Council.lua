@@ -297,6 +297,21 @@ function NLC.Council.BuildRanking(session)
   return candidates
 end
 
+-- Norwegian category labels for raid-facing messages.
+local CAT_NO = {
+  upgrade = "Oppgradering", offspec = "Offspec", tmog = "Transmog",
+  catalyst = "Catalyst", pass = "Pass",
+  disenchant = "Disenchant", bank = "Guildbank", free = "Fri",
+}
+
+-- Announce an award or change to the whole raid so everyone sees it.
+-- RAID_WARNING when we have lead/assist, otherwise RAID. Raid-only.
+function NLC.Council.AnnounceRW(text)
+  if not IsInRaid() then return end
+  local chatType = (UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")) and "RAID_WARNING" or "RAID"
+  SendChatMessage(text, chatType)
+end
+
 function NLC.Council.Award(playerName)
   if not NLC.isOfficer or not UnitIsGroupLeader("player") or #activeSessions == 0 then return end
 
@@ -325,10 +340,7 @@ function NLC.Council.Award(playerName)
     NLC.db.weeklyLoot.counts[playerName] = (NLC.db.weeklyLoot.counts[playerName] or 0) + 1
   end
 
-  if IsInRaid() then
-    local chatType = (UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")) and "RAID_WARNING" or "RAID"
-    SendChatMessage(playerName .. " has been awarded " .. session.itemLink .. " for " .. category, chatType)
-  end
+  NLC.Council.AnnounceRW(session.itemLink .. " tildelt " .. playerName .. " (" .. (CAT_NO[category] or category) .. ")")
 
   for i, s in ipairs(activeSessions) do
     if i ~= currentWizardIndex and s.phase == "ranking" then
@@ -351,6 +363,7 @@ function NLC.Council.AwardSpecial(target)
   local label = SPECIAL_LABEL[target] or target
   NLC.RecordAward(session.itemLink, label, UnitName("player"), session.boss, target, session.itemId, false)
   NLC.Utils.Print(session.itemLink .. " -> " .. label .. " (teller ikke som loot)")
+  NLC.Council.AnnounceRW(session.itemLink .. " → " .. (CAT_NO[target] or label) .. " (teller ikke som loot)")
   session.phase = "awarded"
   NLC.Council.ClearRoll()
   NLC.Council.AdvanceWizard()

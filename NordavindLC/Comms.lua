@@ -20,9 +20,48 @@ function NLC.Comms.Register()
   registered = true
 end
 
+-- Central addon-comms restriction gating (mirrors Blizzard's SendAddonMessage lockout during
+-- encounters / M+). Queue every outgoing message while restricted; flush when the lock lifts.
+-- All sends (SESSION_START, INTEREST, AWARD, LOOT_REPORT, ...) route through NLC.Comms.Send,
+-- so gating it here protects the whole protocol.
+local commsQueue = {}
+local commsRestricted = false
+
+local function commsAreRestricted()
+  local E = Enum and Enum.AddOnRestrictionType
+  if not (E and C_RestrictedActions and C_RestrictedActions.IsAddOnRestrictionActive) then
+    return false
+  end
+  local function active(t) return t ~= nil and C_RestrictedActions.IsAddOnRestrictionActive(t) or false end
+  return active(E.Encounter) or active(E.ChallengeMode) or false
+end
+
+local function flushCommsQueue()
+  if #commsQueue == 0 then return end
+  local pending = commsQueue
+  commsQueue = {}
+  for _, payload in ipairs(pending) do
+    NLC.Comms:SendCommMessage(PREFIX, payload, "RAID")
+  end
+end
+
+local _restrictFrame = CreateFrame("Frame")
+_restrictFrame:RegisterEvent("ADDON_RESTRICTION_STATE_CHANGED")
+_restrictFrame:SetScript("OnEvent", function()
+  commsRestricted = commsAreRestricted()
+  if not commsRestricted then flushCommsQueue() end
+end)
+commsRestricted = commsAreRestricted()
+
+function NLC.Comms.IsRestricted() return commsRestricted end
+
 function NLC.Comms.Send(msgType, data)
   if not IsInRaid() then return end
   local payload = NLC.Comms:Serialize(msgType, data)
+  if commsRestricted then
+    table.insert(commsQueue, payload)
+    return
+  end
   NLC.Comms:SendCommMessage(PREFIX, payload, "RAID")
 end
 

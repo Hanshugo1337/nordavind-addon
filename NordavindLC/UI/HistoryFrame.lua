@@ -56,6 +56,11 @@ local function ApplyAwardEdit(entry, newRecipient, newCategory)
     newAwardedTo      = newRecipient,
     newCategory       = newCategory,
   })
+
+  -- Announce the change to the raid.
+  if NLC.Council and NLC.Council.AnnounceRW then
+    NLC.Council.AnnounceRW("Endret tildeling: " .. (entry.item or "?") .. " — " .. (oldRecipient or "?") .. " → " .. newRecipient)
+  end
 end
 
 NLC.History.ApplyAwardEdit = ApplyAwardEdit
