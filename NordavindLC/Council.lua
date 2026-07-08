@@ -495,6 +495,7 @@ function NLC.Council.StartRoll()
     NLC.Utils.Print("Legg til minst 2 kandidater i roll-offen.")
     return
   end
+  if _roll.timer then _roll.timer:Cancel() end
   _roll.results = {}
   _roll.active = true
   _rollFrame:RegisterEvent("CHAT_MSG_SYSTEM")
@@ -508,8 +509,9 @@ function NLC.Council.StartRoll()
       SendChatMessage("Roll-off for " .. itemLabel .. " — /roll 100 takk!", "WHISPER", nil, n)
     end
   end
-  -- Close the capture window after 15s.
-  C_Timer.After(15, function()
+  -- Close the capture window after 15s (cancellable so a re-started roll-off resets it).
+  _roll.timer = C_Timer.NewTimer(15, function()
+    _roll.timer = nil
     _roll.active = false
     _rollFrame:UnregisterEvent("CHAT_MSG_SYSTEM")
   end)
