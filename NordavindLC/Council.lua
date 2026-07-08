@@ -364,6 +364,8 @@ function NLC.Council.AwardSpecial(target)
   NLC.RecordAward(session.itemLink, label, UnitName("player"), session.boss, target, session.itemId, false)
   NLC.Utils.Print(session.itemLink .. " -> " .. label .. " (teller ikke som loot)")
   NLC.Council.AnnounceRW(session.itemLink .. " → " .. (CAT_NO[target] or label) .. " (teller ikke som loot)")
+  -- Broadcast so raiders' read-only wizard advances past this item too.
+  NLC.Comms.Send("AWARD", { sessionIdx = session.sessionIdx, itemLink = session.itemLink, playerName = label, category = target })
   session.phase = "awarded"
   NLC.Council.ClearRoll()
   NLC.Council.AdvanceWizard()
@@ -572,9 +574,13 @@ function NLC.Council.ResumeAll()
   NLC.Utils.Print("Wizard opened with " .. #activeSessions .. " pending items.")
 end
 
+local SPECIAL_CAT = { disenchant = true, bank = true, free = true }
 function NLC.Council.OnAward(sessionIdx, itemLink, playerName, sender, category)
-  local catText = category and (" for " .. category) or ""
-  NLC.Utils.Print(playerName .. " has been awarded " .. itemLink .. catText)
+  if SPECIAL_CAT[category] then
+    NLC.Utils.Print(itemLink .. " → " .. (CAT_NO[category] or playerName) .. " (teller ikke som loot)")
+  else
+    NLC.Utils.Print(itemLink .. " tildelt " .. playerName .. " (" .. (CAT_NO[category] or category or "?") .. ")")
+  end
 
   -- Non-officers: update read-only wizard display
   if not NLC.isOfficer then
