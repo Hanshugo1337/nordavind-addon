@@ -124,7 +124,7 @@ local function createItemRow(parent, index, item)
     local noUse = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     noUse:SetPoint("TOPLEFT", 12, -52)
     noUse:SetText(T.MUTED .. "Ikke brukbart for din klasse|r")
-    itemRows[item.sessionIdx] = rowData
+    itemRows[item.sessionIdx or index] = rowData
     return row
   end
 
@@ -194,7 +194,7 @@ local function createItemRow(parent, index, item)
   noteBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
   rowData.noteBox = noteBox
 
-  itemRows[item.sessionIdx] = rowData
+  itemRows[item.sessionIdx or index] = rowData
   return row
 end
 

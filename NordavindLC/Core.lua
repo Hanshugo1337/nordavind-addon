@@ -441,8 +441,8 @@ SlashCmdList["NORDLC"] = function(msg)
 
   elseif cmd == "testpopup" then
     local fakeItems = {
-      { itemLink = "|cffa335ee|Hitem:111111::::::::80:::::|h[Void-Touched Chestplate]|h|r", itemId = 111111, ilvl = 639, equipLoc = "INVTYPE_CHEST", boss = "Test Boss" },
-      { itemLink = "|cffa335ee|Hitem:222222::::::::80:::::|h[Dreamrift Shoulders]|h|r", itemId = 222222, ilvl = 639, equipLoc = "INVTYPE_SHOULDER", boss = "Test Boss" },
+      { sessionIdx = 1, itemLink = "|cffa335ee|Hitem:111111::::::::80:::::|h[Void-Touched Chestplate]|h|r", itemId = 111111, ilvl = 639, equipLoc = "INVTYPE_CHEST", boss = "Test Boss" },
+      { sessionIdx = 2, itemLink = "|cffa335ee|Hitem:222222::::::::80:::::|h[Dreamrift Shoulders]|h|r", itemId = 222222, ilvl = 639, equipLoc = "INVTYPE_SHOULDER", boss = "Test Boss" },
     }
     NLC.UI.ShowMultiItemPopup(fakeItems, 30)
     NLC.Utils.Print("Test multi-item popup shown.")
