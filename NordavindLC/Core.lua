@@ -98,7 +98,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
       NLC.Deactivate()
       NLC.Utils.Print("Deaktivert (forlot raid).")
     end
-    -- Weekly loot reset check (Wednesday 09:00 UTC)
+    -- Weekly loot reset check (onsdag 07:00 lokal servertid — se funksjonen)
     local lastReset = GetLastWednesdayResetUTC()
     if NLC.db.weeklyLoot.resetTimestamp < lastReset then
       NLC.db.weeklyLoot.counts = {}
@@ -214,8 +214,17 @@ end
 
 function NLC.Deactivate()
   NLC.active = false
+  NLC.testMode = false
   NLC.LootDetection.Unregister()
   NLC.Utils.Print("Deactivated.")
+end
+
+-- Loot-lederen: den som faktisk deler ut. Solo er UnitIsGroupLeader alltid
+-- false, så uten testMode kunne ingen av utdelingsknappene testes offline —
+-- og da fanger man ingenting før man står i et raid med tjue mann.
+-- Settes kun av /nordlc test, nullstilles ved Deactivate og ved ekte council.
+function NLC.IsLootLeader()
+  return UnitIsGroupLeader("player") or NLC.testMode == true
 end
 
 function NLC.RecordAward(item, awardedTo, awardedBy, boss, category, itemId, exportable, note)
@@ -398,6 +407,9 @@ SlashCmdList["NORDLC"] = function(msg)
   elseif cmd == "test" then
     NLC.isOfficer = true
     NLC.active = true
+    -- Lar utdelingsknappene vises solo. Nullstilles ved Deactivate og ved
+    -- ekte council, så den aldri kan henge igjen inn i et raid.
+    NLC.testMode = true
 
     -- Mock imported scoring data
     NLC.db.importData = NLC.db.importData or {}
@@ -452,8 +464,41 @@ SlashCmdList["NORDLC"] = function(msg)
       table.insert(fakeSessions, session)
     end
 
+    -- Registrer dem som aktive, ellers finner wizard-handlingene (avstemming,
+    -- award) ingen session å jobbe mot.
+    NLC.Council._setActiveSessions(fakeSessions)
     NLC.UI.ShowWizard(fakeSessions, 1)
     NLC.Utils.Print("Test wizard shown with " .. #fakeSessions .. " items. Click Award to test auto-advance.")
+
+  elseif cmd == "testvote" then
+    -- Seeder en avstemming direkte i tilstanden, uten comms, så hele flyten
+    -- (seddel → opptelling → begrunnelse → note) kan kjøres alene offline.
+    local sessions = NLC.Council.GetActiveSessions()
+    local session = sessions[NLC.Council.GetWizardIndex()]
+    if not session then
+      NLC.Utils.Print("Ingen aktiv session — kjør /nordlc test først.")
+      return
+    end
+    local ballot = {}
+    for _, c in ipairs(session.ranked or {}) do table.insert(ballot, c.name) end
+    if #ballot < 2 then
+      NLC.Utils.Print("Trenger minst to kandidater — kjør /nordlc test først.")
+      return
+    end
+    NLC.Council.StartVote(session.sessionIdx, ballot)
+    local vs = NLC.Council.GetVoteState()
+    if not vs.active then
+      -- StartVote krever raid leader. Offline seeder vi tilstanden direkte.
+      vs.active = true
+      vs.sessionIdx = session.sessionIdx
+      vs.ballot = ballot
+      vs.results = {}
+      vs.officers = {}
+    end
+    vs.officers = { Fisk = true, Braxina = true, Bell = true, Gyddian = true }
+    vs.results = { Fisk = ballot[1], Braxina = ballot[1], Bell = ballot[2] }
+    NLC.UI.ShowWizard(sessions, NLC.Council.GetWizardIndex())
+    NLC.Utils.Print("Testavstemming seedet: 3 av 4 officers har stemt. Trykk Tildel på en kandidat.")
 
   elseif cmd == "testpopup" then
     local fakeItems = {

@@ -29,6 +29,9 @@ function NLC.Council.StartMultiSession(items, boss)
     return
   end
 
+  -- Et ekte council overtar: testmodus skal aldri gjelde her.
+  NLC.testMode = false
+
   activeSessions = {}
   respondents = {}
   raidAddonUsers = 0
@@ -325,8 +328,25 @@ function NLC.Council.AnnounceRW(text)
 end
 
 function NLC.Council.Award(playerName)
-  if not NLC.isOfficer or not UnitIsGroupLeader("player") or #activeSessions == 0 then return end
+  if not NLC.isOfficer or not NLC.IsLootLeader() or #activeSessions == 0 then return end
 
+  local session = activeSessions[currentWizardIndex]
+  if not session then return end
+
+  -- Er det stemt over akkurat dette itemet, kreves en begrunnelse før noe skjer.
+  -- Reglene lover at unntaket logges *med* grunn, ikke bare at det skjedde.
+  if _vote.active and _vote.sessionIdx == session.sessionIdx and NLC.UI.ShowReasonPopup then
+    NLC.UI.ShowReasonPopup(playerName, function(reason)
+      local tally = NLC.Council.FormatVoteTally() or "officer-avstemming"
+      NLC.Council.DoAward(playerName, tally .. " — " .. reason)
+    end)
+    return
+  end
+
+  NLC.Council.DoAward(playerName, nil)
+end
+
+function NLC.Council.DoAward(playerName, note)
   local session = activeSessions[currentWizardIndex]
   if not session then return end
 
@@ -342,7 +362,7 @@ function NLC.Council.Award(playerName)
   end
 
   NLC.Comms.Send("AWARD", { sessionIdx = session.sessionIdx, itemLink = session.itemLink, playerName = playerName, category = category })
-  NLC.RecordAward(session.itemLink, playerName, UnitName("player"), session.boss, category, session.itemId)
+  NLC.RecordAward(session.itemLink, playerName, UnitName("player"), session.boss, category, session.itemId, true, note)
   NLC.Utils.Print(session.itemLink .. " awarded to " .. playerName .. " (" .. category .. ")")
 
   -- Track weekly loot count in SavedVariables (resets each Wednesday).
@@ -352,7 +372,9 @@ function NLC.Council.Award(playerName)
     NLC.db.weeklyLoot.counts[playerName] = (NLC.db.weeklyLoot.counts[playerName] or 0) + 1
   end
 
-  NLC.Council.AnnounceRW(session.itemLink .. " tildelt " .. playerName .. " (" .. (CAT_NO[category] or category) .. ")")
+  local msg = session.itemLink .. " tildelt " .. playerName .. " (" .. (CAT_NO[category] or category) .. ")"
+  if note then msg = msg .. " — " .. note end
+  NLC.Council.AnnounceRW(msg)
 
   for i, s in ipairs(activeSessions) do
     if i ~= currentWizardIndex and s.phase == "ranking" then
@@ -362,6 +384,7 @@ function NLC.Council.Award(playerName)
 
   session.phase = "awarded"
   NLC.Council.ClearRoll()
+  NLC.Council.ClearVote()
   NLC.Council.AdvanceWizard()
 end
 
@@ -369,7 +392,7 @@ end
 -- count as loot: no weekly counter, not exported to the website.
 local SPECIAL_LABEL = { disenchant = "Disenchant", bank = "Guild Bank", free = "Free" }
 function NLC.Council.AwardSpecial(target)
-  if not NLC.isOfficer or not UnitIsGroupLeader("player") then return end
+  if not NLC.isOfficer or not NLC.IsLootLeader() then return end
   local session = activeSessions[currentWizardIndex]
   if not session then return end
   local label = SPECIAL_LABEL[target] or target
@@ -437,6 +460,14 @@ end
 
 function NLC.Council.GetActiveSessions()
   return activeSessions
+end
+
+-- Test-søm: lar /nordlc test registrere sine fiktive sessions som aktive, slik
+-- at wizard-handlinger (avstemming, award) kan kjøres offline. Samme mønster
+-- som NLC.LootDetection._setDetected. Ikke ment for vanlig bruk.
+function NLC.Council._setActiveSessions(sessions)
+  activeSessions = sessions
+  currentWizardIndex = 1
 end
 
 -- Number of raiders who have responded on a given item (officer only — interests are
@@ -681,7 +712,7 @@ end
 -- Lederen starter. Egen kringkasting kommer tilbake til oss selv, så vi blir
 -- talt med blant officers og får stemmevinduet på lik linje med de andre.
 function NLC.Council.StartVote(sessionIdx, ballot)
-  if not NLC.isOfficer or not UnitIsGroupLeader("player") then return end
+  if not NLC.isOfficer or not NLC.IsLootLeader() then return end
   if #ballot < 2 then
     NLC.Utils.Print("Legg minst to kandidater på stemmeseddelen.")
     return

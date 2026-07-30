@@ -122,6 +122,15 @@ function NLC.UI.ShowRanking(session, candidates)
       })
     end)
 
+    -- Officer-avstemming — kun lederen, og kun når det finnes noen å stemme over.
+    rankFrame.voteBtn = T.CreateButton(rankFrame, 200, 34, "Be om officer-avstemming")
+    rankFrame.voteBtn:SetPoint("BOTTOMLEFT", 320, 16)
+    rankFrame.voteBtn:SetScript("OnClick", function()
+      local sessions = NLC.Council.GetActiveSessions()
+      local session = sessions[NLC.Council.GetWizardIndex()]
+      if session then NLC.UI.ShowBallotBuilder(session) end
+    end)
+
     rankFrame.closeBtn = T.CreateButton(rankFrame, 120, 34, "Close")
     rankFrame.closeBtn:SetPoint("BOTTOMRIGHT", -20, 16)
     rankFrame.closeBtn:SetScript("OnClick", function()
@@ -148,9 +157,9 @@ function NLC.UI.ShowRanking(session, candidates)
 
   -- Update title with item link
   rankFrame.title:SetText(T.GOLD .. "Loot Council|r  " .. T.MUTED .. "—|r  " .. (session.itemLink or "?"))
-  rankFrame.laterBtn:SetShown(NLC.isOfficer and UnitIsGroupLeader("player"))
+  rankFrame.laterBtn:SetShown(NLC.isOfficer and NLC.IsLootLeader())
   if rankFrame.specialBtn then
-    rankFrame.specialBtn:SetShown(NLC.isOfficer and UnitIsGroupLeader("player"))
+    rankFrame.specialBtn:SetShown(NLC.isOfficer and NLC.IsLootLeader())
   end
 
   -- Clear previous rows
@@ -405,7 +414,7 @@ function NLC.UI.ShowRanking(session, candidates)
     end
 
     -- Award button (raid leader only) with confirmation dialog
-    if NLC.isOfficer and UnitIsGroupLeader("player") then
+    if NLC.isOfficer and NLC.IsLootLeader() then
       local awardBtn = T.CreateButton(row, 80, 30, "Tildel")
       awardBtn:SetPoint("RIGHT", COL.award, 0)
       awardBtn:SetScript("OnClick", function()
@@ -515,6 +524,38 @@ function NLC.UI.ShowWizard(sessions, index)
   rankFrame.laterBtn:SetScript("OnClick", function()
     NLC.Council.AwardLaterCurrent()
   end)
+
+  -- Avstemmingsknappen er lederens — samme gate som Award, ellers kunne to
+  -- officers startet hver sin avstemming på samme item.
+  if rankFrame.voteBtn then
+    if NLC.IsLootLeader() and #ranked > 0 then
+      rankFrame.voteBtn:Show()
+    else
+      rankFrame.voteBtn:Hide()
+    end
+  end
+
+  -- Opptelling — kun for itemet det faktisk stemmes over.
+  if not rankFrame.voteText then
+    rankFrame.voteText = rankFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    rankFrame.voteText:SetPoint("BOTTOMLEFT", 20, 58)
+    rankFrame.voteText:SetJustifyH("LEFT")
+  end
+  local tally = NLC.Council.GetVoteTally()
+  local vs = NLC.Council.GetVoteState()
+  if tally and vs.sessionIdx == session.sessionIdx then
+    local lines = { T.GOLD .. "Officer-avstemming|r" }
+    for _, row in ipairs(tally.rows) do
+      table.insert(lines, string.format("  %s  %d  %s%s|r",
+        row.name, row.count, T.MUTED, table.concat(row.voters, ", ")))
+    end
+    table.insert(lines, string.format("%s%d av %d officers har stemt|r",
+      T.MUTED, tally.cast, tally.officers))
+    rankFrame.voteText:SetText(table.concat(lines, "\n"))
+    rankFrame.voteText:Show()
+  else
+    rankFrame.voteText:Hide()
+  end
 end
 
 function NLC.UI.HideWizard()
@@ -530,4 +571,192 @@ end
 -- True if the award wizard/ranking frame is currently visible.
 function NLC.UI.IsWizardOpen()
   return rankFrame ~= nil and rankFrame:IsShown()
+end
+
+-- ============================================================
+-- Officer-avstemming: stemmeseddel, stemmevindu og begrunnelse
+-- ============================================================
+
+-- Lederens stemmeseddel: alle kandidater er avkrysset som utgangspunkt, så man
+-- fjerner de uaktuelle i stedet for å bygge lista fra bunnen midt i et raid.
+local ballotFrame
+function NLC.UI.ShowBallotBuilder(session)
+  if not ballotFrame then
+    ballotFrame = CreateFrame("Frame", "NordavindLCBallot", UIParent, "BackdropTemplate")
+    ballotFrame:SetSize(340, 420)
+    ballotFrame:SetPoint("CENTER")
+    ballotFrame:SetFrameStrata("DIALOG")
+    ballotFrame:SetMovable(true)
+    ballotFrame:EnableMouse(true)
+    ballotFrame:RegisterForDrag("LeftButton")
+    ballotFrame:SetScript("OnDragStart", ballotFrame.StartMoving)
+    ballotFrame:SetScript("OnDragStop", ballotFrame.StopMovingOrSizing)
+    T.ApplyBackdrop(ballotFrame)
+    T.CreateTitleBar(ballotFrame, "Officer-avstemming")
+    ballotFrame.rows = {}
+    ballotFrame.extra = {}
+  end
+
+  ballotFrame.session = session
+  ballotFrame.checked = {}
+
+  for _, r in ipairs(ballotFrame.rows) do
+    r:Hide()
+    if r.txt then r.txt:Hide() end
+  end
+  wipe(ballotFrame.rows)
+
+  local y = -44
+  local function addRow(name, label)
+    local row = CreateFrame("CheckButton", nil, ballotFrame, "UICheckButtonTemplate")
+    row:SetSize(24, 24)
+    row:SetPoint("TOPLEFT", 16, y)
+    row:SetChecked(true)
+    ballotFrame.checked[name] = true
+    row:SetScript("OnClick", function(self)
+      ballotFrame.checked[name] = self:GetChecked() and true or nil
+    end)
+    local txt = ballotFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    txt:SetPoint("LEFT", row, "RIGHT", 6, 0)
+    txt:SetText(label)
+    -- Navnet lagres på raden. Å parse det ut av etiketten igjen ville brukket
+    -- første gang noen får et mellomrom eller en fargekode i visningsteksten.
+    row.playerName = name
+    row.txt = txt
+    table.insert(ballotFrame.rows, row)
+    y = y - 28
+  end
+
+  for _, c in ipairs(session.ranked or {}) do
+    addRow(c.name, string.format("%s  %s(%s, %.1fp)|r",
+      c.name, T.MUTED, c.category or "?", c.score or 0))
+  end
+  for _, name in ipairs(ballotFrame.extra) do
+    addRow(name, name .. "  " .. T.MUTED .. "(lagt til)|r")
+  end
+
+  if not ballotFrame.addBtn then
+    ballotFrame.addInput = CreateFrame("EditBox", nil, ballotFrame, "InputBoxTemplate")
+    ballotFrame.addInput:SetSize(140, 24)
+    ballotFrame.addInput:SetPoint("BOTTOMRIGHT", -16, 56)
+    ballotFrame.addInput:SetAutoFocus(false)
+
+    ballotFrame.addBtn = T.CreateButton(ballotFrame, 150, 28, "+ Legg til spiller")
+    ballotFrame.addBtn:SetPoint("BOTTOMLEFT", 16, 54)
+    ballotFrame.addBtn:SetScript("OnClick", function()
+      local n = ballotFrame.addInput:GetText():match("^%s*(.-)%s*$")
+      if n and n ~= "" then
+        table.insert(ballotFrame.extra, n)
+        ballotFrame.addInput:SetText("")
+        NLC.UI.ShowBallotBuilder(ballotFrame.session)
+      end
+    end)
+
+    ballotFrame.startBtn = T.CreateButton(ballotFrame, 150, 30, "Start avstemming")
+    ballotFrame.startBtn:SetPoint("BOTTOMLEFT", 16, 16)
+    ballotFrame.startBtn:SetScript("OnClick", function()
+      local ballot = {}
+      for _, r in ipairs(ballotFrame.rows) do
+        if ballotFrame.checked[r.playerName] then table.insert(ballot, r.playerName) end
+      end
+      NLC.Council.StartVote(ballotFrame.session.sessionIdx, ballot)
+      wipe(ballotFrame.extra)
+      ballotFrame:Hide()
+    end)
+
+    ballotFrame.cancelBtn = T.CreateButton(ballotFrame, 100, 30, "Avbryt")
+    ballotFrame.cancelBtn:SetPoint("BOTTOMRIGHT", -16, 16)
+    ballotFrame.cancelBtn:SetScript("OnClick", function()
+      wipe(ballotFrame.extra)
+      ballotFrame:Hide()
+    end)
+  end
+
+  ballotFrame:Show()
+end
+
+-- Officers får dette når lederen starter. Ett klikk per navn; ny stemme
+-- overskriver forrige, så feilklikk kan rettes uten å spørre lederen.
+local votePopup
+function NLC.UI.ShowVotePopup(sessionIdx, ballot)
+  if not votePopup then
+    votePopup = CreateFrame("Frame", "NordavindLCVote", UIParent, "BackdropTemplate")
+    votePopup:SetSize(280, 360)
+    votePopup:SetPoint("CENTER", 320, 0)
+    votePopup:SetFrameStrata("DIALOG")
+    votePopup:SetMovable(true)
+    votePopup:EnableMouse(true)
+    votePopup:RegisterForDrag("LeftButton")
+    votePopup:SetScript("OnDragStart", votePopup.StartMoving)
+    votePopup:SetScript("OnDragStop", votePopup.StopMovingOrSizing)
+    T.ApplyBackdrop(votePopup)
+    T.CreateTitleBar(votePopup, "Hvem skal ha itemet?")
+    votePopup.btns = {}
+  end
+
+  for _, b in ipairs(votePopup.btns) do b:Hide() end
+  wipe(votePopup.btns)
+
+  local y = -44
+  for _, name in ipairs(ballot or {}) do
+    local b = T.CreateButton(votePopup, 240, 28, name)
+    b:SetPoint("TOPLEFT", 20, y)
+    b:SetScript("OnClick", function()
+      NLC.Council.CastVote(sessionIdx, name)
+      NLC.Utils.Print("Stemte på " .. name .. ".")
+      votePopup:Hide()
+    end)
+    table.insert(votePopup.btns, b)
+    y = y - 32
+  end
+
+  votePopup:Show()
+end
+
+-- Begrunnelsen er påkrevd: regelteksten lover at unntaket logges *med* grunn.
+-- Uten den er "logges" bare en RW-melding som ruller vekk.
+local reasonPopup
+function NLC.UI.ShowReasonPopup(playerName, onConfirm)
+  if not reasonPopup then
+    reasonPopup = CreateFrame("Frame", "NordavindLCReason", UIParent, "BackdropTemplate")
+    reasonPopup:SetSize(400, 170)
+    reasonPopup:SetPoint("CENTER")
+    reasonPopup:SetFrameStrata("FULLSCREEN_DIALOG")
+    reasonPopup:EnableMouse(true)
+    T.ApplyBackdrop(reasonPopup)
+    T.CreateTitleBar(reasonPopup, "Begrunnelse for unntaket")
+
+    reasonPopup.label = reasonPopup:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    reasonPopup.label:SetPoint("TOPLEFT", 20, -44)
+
+    reasonPopup.input = CreateFrame("EditBox", nil, reasonPopup, "InputBoxTemplate")
+    reasonPopup.input:SetSize(356, 26)
+    reasonPopup.input:SetPoint("TOPLEFT", 22, -72)
+    reasonPopup.input:SetAutoFocus(true)
+
+    reasonPopup.hint = reasonPopup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    reasonPopup.hint:SetPoint("TOPLEFT", 20, -102)
+    reasonPopup.hint:SetText("Kort og konkret — dette havner i loot-historikken.")
+
+    reasonPopup.okBtn = T.CreateButton(reasonPopup, 120, 30, "Tildel")
+    reasonPopup.okBtn:SetPoint("BOTTOMRIGHT", -20, 16)
+    reasonPopup.okBtn:SetScript("OnClick", function()
+      local txt = reasonPopup.input:GetText():match("^%s*(.-)%s*$")
+      if not txt or txt == "" then
+        NLC.Utils.Print("Begrunnelse er påkrevd når itemet gis utenom lista.")
+        return
+      end
+      reasonPopup:Hide()
+      if reasonPopup.cb then reasonPopup.cb(txt) end
+    end)
+
+    reasonPopup.cancelBtn = T.CreateButton(reasonPopup, 100, 30, "Avbryt")
+    reasonPopup.cancelBtn:SetPoint("BOTTOMLEFT", 20, 16)
+    reasonPopup.cancelBtn:SetScript("OnClick", function() reasonPopup:Hide() end)
+  end
+
+  reasonPopup.label:SetText("Itemet gis til " .. T.GOLD .. playerName .. "|r utenom lista.")
+  reasonPopup.input:SetText("")
+  reasonPopup.cb = onConfirm
+  reasonPopup:Show()
 end
