@@ -4,8 +4,9 @@
 local NLC = NordavindLC_NS
 
 local catOrder = { upgrade = 1, catalyst = 2, offspec = 3, tmog = 4 }
--- roleTier: dps always above tank/healer within same category
-local roleTier = { dps = 1, tank = 2, healer = 2 }
+-- Rank er et hardt skille: en trial kan aldri rangeres over en raider, slik
+-- sesong 2-reglene lover guilden. Verdiene kommer fra nettsiden i små bokstaver.
+local rankOrder = { raider = 1, backup = 2, trial = 3 }
 
 local activeSessions = {}    -- list of session tables (one per item)
 local currentWizardIndex = 0 -- which item officer is viewing in wizard
@@ -289,8 +290,13 @@ function NLC.Council.BuildRanking(session)
   table.sort(candidates, function(a, b)
     local ca, cb = catOrder[a.category] or 99, catOrder[b.category] or 99
     if ca ~= cb then return ca < cb end
-    local ra, rb = roleTier[a.role] or 2, roleTier[b.role] or 2
+    -- Rank er et hardt skille: en trial kan aldri rangeres over en raider.
+    -- Ukjent rank gir 99, altså sist — aldri først.
+    local ra, rb = rankOrder[a.rank] or 99, rankOrder[b.rank] or 99
     if ra ~= rb then return ra < rb end
+    -- Rollen ligger allerede som +5 i baseScore fra nettsiden. Som egen
+    -- sorteringsnøkkel telte den dobbelt og gjorde rolle til en bøtte —
+    -- da ville en tank aldri fått en trinket.
     return a.score > b.score
   end)
 

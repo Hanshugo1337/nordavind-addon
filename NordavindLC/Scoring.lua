@@ -3,6 +3,12 @@
 
 local NLC = NordavindLC_NS
 
+-- Straff per item en spiller har fått denne uka. MÅ følge ukesstraffen i
+-- app/api/loot/route.ts (lootPenalty i nordavind-web/lib/scoring.ts) — ligger
+-- de to på ulike tall, straffes samme item ulikt avhengig av om importen har
+-- rukket å oppdatere seg, og rekkefølgen i raidet blir en annen enn nettsidens.
+local WEEKLY_LOOT_PENALTY = 10
+
 function NLC.Scoring.GetImportedScore(playerName)
   local players = NLC.db.importData and NLC.db.importData.players
   if not players then return nil end
@@ -35,13 +41,13 @@ function NLC.Scoring.Calculate(imported, live, playerName)
     -- Adjust for loot awarded during the current raid session that the server hasn't
     -- seen yet (i.e. since the last /nordlc import). weeklyLoot.counts tracks every
     -- award made by this officer this week; if that count exceeds what the import
-    -- knew about, apply the extra -5 penalty per item now.
+    -- knew about, apply the extra weekly penalty per item now.
     local wl = NLC.db.weeklyLoot
     if playerName and wl and wl.resetTimestamp and wl.resetTimestamp > 0 then
       local sessionLoot = (wl.counts and wl.counts[playerName]) or 0
       local importedThisWeek = imported.lootThisWeek or 0
       if sessionLoot > importedThisWeek then
-        local extraPenalty = (sessionLoot - importedThisWeek) * 5
+        local extraPenalty = (sessionLoot - importedThisWeek) * WEEKLY_LOOT_PENALTY
         score = score - extraPenalty
         table.insert(breakdown, { label = "Session loot", value = -extraPenalty })
       end
