@@ -6,6 +6,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { SavedVarsWatcher } = require("../lib/watcher");
+const { parseSavedVariables } = require("../lib/lua-parser");
 
 function makeWatcher(dbBody) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "nlc-"));
@@ -39,4 +40,41 @@ test("writeImportData preserves other globals and leaves no temp file", () => {
   assert.ok(content.includes("NordavindLC_Import"), "import written");
   assert.ok(content.includes("NordavindLC_DB"), "existing global preserved");
   assert.ok(!fs.existsSync(svPath + ".tmp"), "temp file cleaned up");
+});
+
+test("writeImportData replaces a WoW-serialized import block without leaving an orphaned tail", () => {
+  const { w, svPath } = makeWatcher(`{ ["pendingExport"] = {}, }`);
+  // WoW's native serializer writes EVERY closing brace at column 0 (unlike the
+  // companion's indented output). This is what Core.lua's logout write-back
+  // produces, and it triggered the "unexpected symbol near '['" corruption.
+  const wowStyle = [
+    "NordavindLC_Import = {",
+    '["players"] = {',
+    '["Testshaman"] = {',
+    '["baseScore"] = 36.2,',
+    "},",
+    '["Testpaladin"] = {',
+    '["baseScore"] = 32,',
+    "},",
+    "},",
+    '["generatedAt"] = "old",',
+    "}",
+    "",
+  ].join("\n");
+  fs.appendFileSync(svPath, wowStyle, "utf-8");
+
+  w.writeImportData({ players: { Alice: { baseScore: 10 } }, generatedAt: 1 });
+  const content = fs.readFileSync(svPath, "utf-8");
+
+  assert.ok(content.includes("Alice"), "new import written");
+  assert.ok(!content.includes("Testshaman"), "old import fully removed");
+  assert.ok(!content.includes("Testpaladin"), "no orphaned tail left behind");
+
+  const open = (content.match(/\{/g) || []).length;
+  const close = (content.match(/\}/g) || []).length;
+  assert.strictEqual(open, close, "braces balanced (valid Lua)");
+
+  const vars = parseSavedVariables(content);
+  assert.ok(vars.NordavindLC_DB, "existing global preserved");
+  assert.strictEqual(vars.NordavindLC_Import.players.Alice.baseScore, 10, "new data parses");
 });

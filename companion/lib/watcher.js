@@ -4,6 +4,48 @@ const fs = require("fs");
 const path = require("path");
 const { parseSavedVariables, toSavedVariable } = require("./lua-parser");
 
+/**
+ * Replace an existing top-level `name = <table|nil>` assignment with `replacement`.
+ *
+ * Uses brace-depth scanning (string-aware) to find the exact end of the value,
+ * so it works whether the block was written by the companion (only the outer `}`
+ * at column 0) or re-serialized by WoW on logout (every `}` at column 0). The old
+ * `/\{[^]*?\n\}/` regex matched lazily to the FIRST column-0 `}` — for WoW-written
+ * blocks that is an inner brace, so the rest was left orphaned at file scope and
+ * produced "unexpected symbol near '['". Returns null if the global isn't present.
+ */
+function replaceGlobalAssignment(content, name, replacement) {
+  const m = new RegExp(`^${name}\\s*=\\s*`, "m").exec(content);
+  if (!m) return null;
+
+  const valueStart = m.index + m[0].length;
+  let end;
+
+  if (content[valueStart] === "{") {
+    let depth = 0, inStr = false, strChar = "";
+    let pos = valueStart;
+    for (; pos < content.length; pos++) {
+      const ch = content[pos];
+      if (inStr) {
+        if (ch === "\\") { pos++; continue; }
+        if (ch === strChar) inStr = false;
+        continue;
+      }
+      if (ch === '"' || ch === "'") { inStr = true; strChar = ch; continue; }
+      if (ch === "{") depth++;
+      else if (ch === "}") { depth--; if (depth === 0) { pos++; break; } }
+    }
+    if (depth !== 0) return null; // unbalanced — don't risk a corrupt splice
+    end = pos;
+  } else if (content.startsWith("nil", valueStart)) {
+    end = valueStart + 3;
+  } else {
+    return null;
+  }
+
+  return content.slice(0, m.index) + replacement + content.slice(end);
+}
+
 class SavedVarsWatcher {
   constructor(wowPath, accountName) {
     this.svPath = path.join(
@@ -113,13 +155,11 @@ class SavedVarsWatcher {
 
     const importStr = toSavedVariable("NordavindLC_Import", scoringData);
 
-    if (existing.includes("NordavindLC_Import")) {
-      existing = existing.replace(
-        /NordavindLC_Import\s*=\s*(?:\{[^]*?\n\}|nil)/,
-        importStr.trim()
-      );
+    const replaced = replaceGlobalAssignment(existing, "NordavindLC_Import", importStr.trim());
+    if (replaced !== null) {
+      existing = replaced;
     } else {
-      existing += "\n" + importStr;
+      existing = existing.replace(/\s*$/, "") + "\n" + importStr;
     }
 
     // Atomic write: temp file + rename, so an interrupted write can't corrupt SavedVariables.
