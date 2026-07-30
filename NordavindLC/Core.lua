@@ -15,10 +15,20 @@ NLC.importData = {}
 NLC.pendingSessions = {}
 
 local function GetLastWednesdayResetUTC()
+  -- Spør spillet framfor å regne. Resetten er onsdag 07:00 lokal servertid,
+  -- altså 06:00 UTC om vinteren og 05:00 UTC om sommeren — en hardkodet
+  -- UTC-time er riktig maks halve året. C_DateAndTime kjenner både sommertid
+  -- og region, så den er autoritativ.
+  if C_DateAndTime and C_DateAndTime.GetSecondsUntilWeeklyReset then
+    local secs = C_DateAndTime.GetSecondsUntilWeeklyReset()
+    if secs and secs > 0 then
+      return time() + secs - 7 * 86400
+    end
+  end
+
+  -- Fallback hvis API-et mangler: onsdag 06:00 UTC. Kan ligge én time feil i
+  -- sommerhalvåret, men brukes kun til å avgjøre om telleren skal nullstilles.
   -- Epoch (Jan 1 1970) was Thursday. First Wednesday = Jan 7 1970 = day 6.
-  -- Ukesreset = onsdag 06:00 UTC. Samme grense som botten (commands/loot.js)
-  -- og nettsiden (lib/scoring.ts, app/api/loot/route.ts) — ligger de på ulike
-  -- tall, teller samme item i ulik uke avhengig av hvilket verktøy du spør.
   local FIRST_RESET = 6 * 86400 + 6 * 3600  -- 540000
   local WEEK = 7 * 86400
   local now = time()
