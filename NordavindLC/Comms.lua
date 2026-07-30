@@ -145,6 +145,25 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
       NLC.Council.OnLootReport(sender, data)
     end
 
+  elseif msgType == "VOTE_START" then
+    if NLC.Council.OnVoteStart then
+      NLC.Council.OnVoteStart(sender, data)
+    end
+
+  -- ACK og CAST gates på isOfficer: kun lederens klient teller opp, så
+  -- raidere skal ikke bruke minne på tilstand de aldri viser.
+  elseif msgType == "VOTE_ACK" then
+    if not NLC.isOfficer then return end
+    if NLC.Council.OnVoteAck then
+      NLC.Council.OnVoteAck(sender, data)
+    end
+
+  elseif msgType == "VOTE_CAST" then
+    if not NLC.isOfficer then return end
+    if NLC.Council.OnVoteCast then
+      NLC.Council.OnVoteCast(sender, data)
+    end
+
   elseif msgType == "VERSION_CHECK" then
     NLC.Comms.Send("VERSION_REPLY", NLC.version)
 

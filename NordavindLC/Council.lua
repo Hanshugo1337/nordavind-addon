@@ -17,6 +17,12 @@ local _rollCallAcks = {}     -- tracks addon users who responded to roll call
 local _rollCallComplete = false -- true after 3s roll call window
 local _collectingClosed = false -- guard against double CloseCollecting
 
+-- Officer-avstemming. Deklarert HER, ikke nede ved resten av avstemmings-
+-- seksjonen: Award leser den som upvalue, og en local må være deklarert før
+-- funksjonen som leser den. Ligger den under, leser Award en global nil og
+-- avstemmingen slår aldri inn — uten feilmelding.
+local _vote = { active = false, sessionIdx = nil, ballot = {}, results = {}, officers = {} }
+
 function NLC.Council.StartMultiSession(items, boss)
   if not NLC.isOfficer then
     NLC.Utils.Print("Only officers can start council.")
@@ -650,4 +656,112 @@ function NLC.Council.OnLootReport(sender, data)
       NLC.UI.ShowLootDetected(items)
     end
   end)
+end
+
+-- ============================================================
+-- Officer-avstemming
+--
+-- Rådgivende: lederen deler ut som før, men når en avstemming er aktiv kreves
+-- en begrunnelse, og stemmetallet følger itemet til databasen.
+--
+-- NLC.isOfficer avgjøres lokalt på hver klient (se Core.lua), så en raider kan
+-- teknisk sett stemme ved å endre egne SavedVariables. Vi låser ikke dette —
+-- det er et guild-addon, ikke en sikkerhetsgrense — men opptellingen viser
+-- navn, slik at et misbruk blir synlig i stedet for skjult.
+--
+-- Tilstanden (_vote) er deklarert øverst i fila, se kommentaren der.
+-- ============================================================
+
+function NLC.Council.GetVoteState() return _vote end
+
+function NLC.Council.ClearVote()
+  _vote = { active = false, sessionIdx = nil, ballot = {}, results = {}, officers = {} }
+end
+
+-- Lederen starter. Egen kringkasting kommer tilbake til oss selv, så vi blir
+-- talt med blant officers og får stemmevinduet på lik linje med de andre.
+function NLC.Council.StartVote(sessionIdx, ballot)
+  if not NLC.isOfficer or not UnitIsGroupLeader("player") then return end
+  if #ballot < 2 then
+    NLC.Utils.Print("Legg minst to kandidater på stemmeseddelen.")
+    return
+  end
+  _vote = { active = true, sessionIdx = sessionIdx, ballot = ballot, results = {}, officers = {} }
+  NLC.Comms.Send("VOTE_START", { sessionIdx = sessionIdx, ballot = ballot })
+  NLC.Council.AnnounceRW("Officer-avstemming startet — " .. #ballot .. " kandidater")
+end
+
+function NLC.Council.OnVoteStart(sender, data)
+  if not NLC.isOfficer then return end
+  NLC.Comms.Send("VOTE_ACK", { sessionIdx = data.sessionIdx })
+  if NLC.UI.ShowVotePopup then
+    NLC.UI.ShowVotePopup(data.sessionIdx, data.ballot)
+  end
+end
+
+function NLC.Council.OnVoteAck(sender, data)
+  if not _vote.active or data.sessionIdx ~= _vote.sessionIdx then return end
+  local name = sender:match("^([^-]+)") or sender
+  _vote.officers[name] = true
+  NLC.Council.RefreshVoteUI()
+end
+
+function NLC.Council.CastVote(sessionIdx, choice)
+  NLC.Comms.Send("VOTE_CAST", { sessionIdx = sessionIdx, choice = choice })
+end
+
+function NLC.Council.OnVoteCast(sender, data)
+  if not _vote.active or data.sessionIdx ~= _vote.sessionIdx then return end
+  local name = sender:match("^([^-]+)") or sender
+  -- Ny stemme fra samme avsender overskriver forrige, så feilklikk kan rettes.
+  _vote.results[name] = data.choice
+  NLC.Council.RefreshVoteUI()
+end
+
+-- Tegner wizarden på nytt hvis den står åpen.
+function NLC.Council.RefreshVoteUI()
+  if not (NLC.UI.IsWizardOpen and NLC.UI.IsWizardOpen()) then return end
+  NLC.Theme.Debounce("vote-refresh", 0.5, function()
+    NLC.UI.ShowWizard(NLC.Council.GetActiveSessions(), NLC.Council.GetWizardIndex())
+  end)
+end
+
+function NLC.Council.GetVoteTally()
+  if not _vote.active then return nil end
+
+  local counts, voters = {}, {}
+  for voter, choice in pairs(_vote.results) do
+    counts[choice] = (counts[choice] or 0) + 1
+    voters[choice] = voters[choice] or {}
+    table.insert(voters[choice], voter)
+  end
+
+  local rows = {}
+  for _, name in ipairs(_vote.ballot) do
+    local v = voters[name] or {}
+    table.sort(v)
+    table.insert(rows, { name = name, count = counts[name] or 0, voters = v })
+  end
+  table.sort(rows, function(a, b)
+    if a.count ~= b.count then return a.count > b.count end
+    return a.name < b.name
+  end)
+
+  local cast = 0
+  for _ in pairs(_vote.results) do cast = cast + 1 end
+  local officers = 0
+  for _ in pairs(_vote.officers) do officers = officers + 1 end
+
+  return { rows = rows, cast = cast, officers = officers }
+end
+
+-- "officer-avstemming 3-2-1" — stemmetallet i synkende rekkefølge.
+function NLC.Council.FormatVoteTally()
+  local tally = NLC.Council.GetVoteTally()
+  if not tally then return nil end
+  local parts = {}
+  for _, row in ipairs(tally.rows) do
+    table.insert(parts, tostring(row.count))
+  end
+  return "officer-avstemming " .. table.concat(parts, "-")
 end
