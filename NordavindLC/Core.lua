@@ -218,7 +218,7 @@ function NLC.Deactivate()
   NLC.Utils.Print("Deactivated.")
 end
 
-function NLC.RecordAward(item, awardedTo, awardedBy, boss, category, itemId, exportable)
+function NLC.RecordAward(item, awardedTo, awardedBy, boss, category, itemId, exportable, note)
   if exportable == nil then exportable = true end
   local entry = {
     item = item,
@@ -228,6 +228,10 @@ function NLC.RecordAward(item, awardedTo, awardedBy, boss, category, itemId, exp
     category = category or "upgrade",
     timestamp = time(),
   }
+  -- Settes kun når den finnes, så eksisterende oppføringer i SavedVariables
+  -- ikke får en tom note-nøkkel de aldri hadde.
+  if note and note ~= "" then entry.note = note end
+
   table.insert(NLC.db.lootHistory, entry)
   if exportable then
     -- Only real player awards are exported to the website. Disenchant/Bank/Free are not.
