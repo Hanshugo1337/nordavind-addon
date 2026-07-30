@@ -16,8 +16,10 @@ NLC.pendingSessions = {}
 
 local function GetLastWednesdayResetUTC()
   -- Epoch (Jan 1 1970) was Thursday. First Wednesday = Jan 7 1970 = day 6.
-  -- EU WoW reset = Wednesday 09:00 UTC
-  local FIRST_RESET = 6 * 86400 + 9 * 3600  -- 550800
+  -- Ukesreset = onsdag 06:00 UTC. Samme grense som botten (commands/loot.js)
+  -- og nettsiden (lib/scoring.ts, app/api/loot/route.ts) — ligger de på ulike
+  -- tall, teller samme item i ulik uke avhengig av hvilket verktøy du spør.
+  local FIRST_RESET = 6 * 86400 + 6 * 3600  -- 540000
   local WEEK = 7 * 86400
   local now = time()
   local weeksSince = math.floor((now - FIRST_RESET) / WEEK)
