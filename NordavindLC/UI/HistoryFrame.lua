@@ -20,6 +20,10 @@ local HISTORY_WIDTH = 580
 -- Also queues a pendingEdit for database sync via companion app.
 local function ApplyAwardEdit(entry, newRecipient, newCategory)
   local oldRecipient = entry.awardedTo
+  -- Fanges FØR løkkene under: `entry` kan være selve historikk-raden, og da er
+  -- entry.category allerede overskrevet når vi skal justere ukestelleren.
+  local oldCategory = entry.category
+  local editedAt = entry.timestamp
 
   -- Update lootHistory
   for _, h in ipairs(NLC.db.lootHistory or {}) do
@@ -45,6 +49,21 @@ local function ApplyAwardEdit(entry, newRecipient, newCategory)
       t.awardedTo = newRecipient
       t.category  = newCategory
       break
+    end
+  end
+
+  -- Flytt ukestelleren med itemet. Uten dette beholdt gammel mottaker straffen
+  -- resten av økta og ny mottaker slapp unna helt — altså feil rekkefølge på
+  -- neste item. Kun awards fra inneværende uke justeres: telleren nullstilles
+  -- onsdag, så et eldre item finnes ikke i den og skal ikke trekkes fra.
+  local wl = NLC.db.weeklyLoot
+  if wl and wl.counts and editedAt and wl.resetTimestamp
+     and editedAt >= wl.resetTimestamp then
+    if oldRecipient and NLC.Scoring.CountsAsLoot(oldCategory) then
+      wl.counts[oldRecipient] = math.max(0, (wl.counts[oldRecipient] or 0) - 1)
+    end
+    if newRecipient and NLC.Scoring.CountsAsLoot(newCategory) then
+      wl.counts[newRecipient] = (wl.counts[newRecipient] or 0) + 1
     end
   end
 

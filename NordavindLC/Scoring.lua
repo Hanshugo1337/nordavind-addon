@@ -9,6 +9,16 @@ local NLC = NordavindLC_NS
 -- rukket å oppdatere seg, og rekkefølgen i raidet blir en annen enn nettsidens.
 local WEEKLY_LOOT_PENALTY = 10
 
+-- Hvilke kategorier som teller som loot. MÅ følge PENALISED i
+-- nordavind-web/lib/scoring.ts og app/api/loot/route.ts. Offspec og tmog er
+-- fritatt: teller addonet dem mens nettsiden ikke gjør det, henger det et
+-- spøkelses-10 på spilleren resten av uka.
+local PENALISED_CATEGORIES = { upgrade = true, catalyst = true }
+
+function NLC.Scoring.CountsAsLoot(category)
+  return PENALISED_CATEGORIES[category or "upgrade"] == true
+end
+
 function NLC.Scoring.GetImportedScore(playerName)
   local players = NLC.db.importData and NLC.db.importData.players
   if not players then return nil end

@@ -339,9 +339,9 @@ function NLC.Council.Award(playerName)
   NLC.RecordAward(session.itemLink, playerName, UnitName("player"), session.boss, category, session.itemId)
   NLC.Utils.Print(session.itemLink .. " awarded to " .. playerName .. " (" .. category .. ")")
 
-  -- Track weekly loot count in SavedVariables (resets each Wednesday)
-  -- Tmog does not count as real loot
-  if category ~= "tmog" then
+  -- Track weekly loot count in SavedVariables (resets each Wednesday).
+  -- Kun straffbare kategorier telles — se NLC.Scoring.CountsAsLoot.
+  if NLC.Scoring.CountsAsLoot(category) then
     NLC.db.weeklyLoot = NLC.db.weeklyLoot or { resetTimestamp = 0, counts = {} }
     NLC.db.weeklyLoot.counts[playerName] = (NLC.db.weeklyLoot.counts[playerName] or 0) + 1
   end
