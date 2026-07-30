@@ -15,11 +15,11 @@ class ApiClient {
     return res.json();
   }
 
-  async awardLoot({ item, awardedTo, awardedBy, boss, timestamp, category }) {
+  async awardLoot({ item, awardedTo, awardedBy, boss, timestamp, category, note }) {
     const res = await fetch(`${this.baseUrl}/api/loot/addon`, {
       method: "POST",
       headers: { "x-api-key": this.apiKey, "Content-Type": "application/json", "Host": "nordavind.cc" },
-      body: JSON.stringify({ item, awardedTo, awardedBy, boss, timestamp, category }),
+      body: JSON.stringify({ item, awardedTo, awardedBy, boss, timestamp, category, note }),
       signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) {
