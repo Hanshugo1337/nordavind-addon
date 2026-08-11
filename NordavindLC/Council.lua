@@ -13,12 +13,54 @@ local catOrder = { upgrade = 1, catalyst = 2, offspec = 3, tmog = 4 }
 -- bivirkning. Den ekte rangen kommer som `displayRank` og brukes kun til visning.
 local rankOrder = { raider = 1, backup = 2, trial = 3, bench = 4 }
 
+-- Seedet terningkast — siste ledd når alt annet står likt.
+--
+-- MÅ gi nøyaktig samme tall som nettsida (`seededRoll` i
+-- nordavind-web/lib/rank-order.ts). Spriker de, gir de to verktøyene hvert sitt
+-- svar på samme uavgjort — og det er nettopp det tiebreaken finnes for å hindre.
+--
+-- FNV-1a over UTF-8-bytes. `string.byte` leser bytes, som er grunnen til at
+-- nettsida gikk over til `TextEncoder`: `charCodeAt` teller kodepunkter, og et
+-- navn som «Visényá» er 7 kodepunkter men 9 bytes.
+--
+-- Lua har ingen `Math.imul`. `mul32` gjør 32-bits multiplikasjon med kun `%` og
+-- `math.floor` — verifisert mot `Math.imul` over 20 000 strenger i
+-- lib/rank-order.test.ts («Lua-transkripsjonen gir identisk tall»).
+--
+-- Fasit for in-game-sjekk (item «Fang of the Abyss», dato 2026-08-18):
+--   Shotgrogg → 0.9258441210086095
+--   Visényá   → 0.3998504093382159
+local function mul32(a, b)
+  local lo = (a % 65536) * b
+  local hi = (math.floor(a / 65536) * b) % 65536
+  return (lo + hi * 65536) % 4294967296
+end
+
+local function seededRoll(seed)
+  local h = 2166136261
+  for i = 1, #seed do
+    -- bit.bxor gir et FORTEGNET 32-bits tall. Uten % 4294967296 blir h negativ,
+    -- og da gir math.floor(h / 65536) i mul32 feil svar — stille.
+    h = bit.bxor(h, seed:byte(i)) % 4294967296
+    h = mul32(h, 16777619)
+  end
+  return h / 4294967295
+end
+
+-- Seed-strengen nettsida bygger: itemName|UTC-dato|spillernavn.
+-- «!» i date() gir UTC, som er det toISOString() bruker.
+local function rollSeed(session, playerName)
+  local itemName = session.itemLink and session.itemLink:match("%[(.-)%]") or ""
+  return itemName .. "|" .. date("!%Y-%m-%d") .. "|" .. playerName
+end
+
 local activeSessions = {}    -- list of session tables (one per item)
 local currentWizardIndex = 0 -- which item officer is viewing in wizard
 local respondents = {}       -- set of player names who have responded
 local raidAddonUsers = 0     -- count of addon users in raid (for auto-close)
 local collectingTimer = nil  -- C_Timer ticker reference
 local _rollCallAcks = {}     -- tracks addon users who responded to roll call
+local _rollCallVersions = {} -- name → addon version, fra samme ack
 local _rollCallComplete = false -- true after 3s roll call window
 local _collectingClosed = false -- guard against double CloseCollecting
 
@@ -65,6 +107,7 @@ function NLC.Council.StartMultiSession(items, boss)
 
   -- Count addon users via roll call (3s collection window)
   _rollCallAcks = {}
+  _rollCallVersions = {}
   _rollCallComplete = false
   NLC.Comms.SendRollCall()
   C_Timer.After(3, function()
@@ -72,6 +115,20 @@ function NLC.Council.StartMultiSession(items, boss)
     for _ in pairs(_rollCallAcks) do count = count + 1 end
     raidAddonUsers = count
     _rollCallComplete = true
+
+    -- En utdatert klient rangerer og viser annerledes — f.eks. «BENCH» der det
+    -- skal stå «BACKUP» — uten å si fra. Offiseren skal se det før utdeling,
+    -- ikke oppdage det i en diskusjon etterpå.
+    local minVer = NLC.Utils.AddonVersion()
+    local gamle = {}
+    for navn, ver in pairs(_rollCallVersions) do
+      if ver ~= minVer then table.insert(gamle, navn .. " (" .. ver .. ")") end
+    end
+    if #gamle > 0 then
+      table.sort(gamle)
+      NLC.Utils.Print(string.format("|cffffcc00%d av %d kjører en annen versjon enn deg (%s): %s|r",
+        #gamle, count, minVer, table.concat(gamle, ", ")))
+    end
     -- Check if enough responses already came in during the 3s window
     local respCount = 0
     for _ in pairs(respondents) do respCount = respCount + 1 end
@@ -294,6 +351,9 @@ function NLC.Council.BuildRanking(session)
       rank = imported and imported.rank or "trial",
       displayRank = imported and imported.displayRank or nil,
       role = role,
+      lootCount = NLC.Scoring.SeasonLootCount(imported, name),
+      -- Regnes her, ikke i komparatoren: table.sort kaller den O(n log n) ganger.
+      tiebreakRoll = seededRoll(rollSeed(session, name)),
       equippedIlvl = interest.equippedIlvl,
       equippedLink = interest.equippedLink,
       tierCount = interest.tierCount,
@@ -312,7 +372,16 @@ function NLC.Council.BuildRanking(session)
     -- Rollen ligger allerede som +5 i baseScore fra nettsiden. Som egen
     -- sorteringsnøkkel telte den dobbelt og gjorde rolle til en bøtte —
     -- da ville en tank aldri fått en trinket.
-    return a.score > b.score
+    if a.score ~= b.score then return a.score > b.score end
+    -- Står to helt likt, går itemet til den som har fått færrest items denne
+    -- sesongen — samme rekkefølge som nettsiden. Uten dette avgjorde table.sort
+    -- utfallet, og de to verktøyene kunne gi hvert sitt svar på samme data.
+    if (a.lootCount or 0) ~= (b.lootCount or 0) then
+      return (a.lootCount or 0) < (b.lootCount or 0)
+    end
+    -- Fortsatt likt: seedet terning, samme hash som nettsida. Alfabetisk ville
+    -- systematisk favorisert navn tidlig i alfabetet over en hel sesong.
+    return (a.tiebreakRoll or 0) < (b.tiebreakRoll or 0)
   end)
 
   return candidates
@@ -657,9 +726,12 @@ function NLC.Council.OnSessionClose(data)
   -- Raiders don't need the wizard — they receive award announcements via chat
 end
 
-function NLC.Council.OnRollCallAck(sender)
+function NLC.Council.OnRollCallAck(sender, version)
   local name = sender:match("^([^-]+)") or sender
   _rollCallAcks[name] = true
+  -- Tom versjon = klient fra før ack-en bar versjon. Den er per definisjon
+  -- gammel, så den skal telles med blant de utdaterte.
+  _rollCallVersions[name] = (version ~= nil and version ~= "" and version) or "?"
 end
 
 -- ============================================================

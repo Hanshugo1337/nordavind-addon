@@ -19,6 +19,25 @@ function NLC.Scoring.CountsAsLoot(category)
   return PENALISED_CATEGORIES[category or "upgrade"] == true
 end
 
+-- Items denne uka. In-game-telleren gjelder naar en reset er registrert, ellers
+-- importen. (Etter onsdagsresetten er counts[playerName] nil — uten vakten
+-- faller Lua gjennom `or`-kjeden til forrige ukes import.)
+function NLC.Scoring.WeeklyLootCount(imported, playerName)
+  local wl = NLC.db.weeklyLoot
+  if wl and wl.resetTimestamp and wl.resetTimestamp > 0 then
+    return (wl.counts and wl.counts[playerName]) or 0
+  end
+  return (imported and imported.lootThisWeek) or 0
+end
+
+-- Items mottatt i sesongen. Skiller to som staar helt likt: reglene gir itemet
+-- til den som har faatt faerrest. lootTotal fra nettsiden teller kun straffbare
+-- kategorier, saa offspec og tmog paavirker heller ikke denne.
+function NLC.Scoring.SeasonLootCount(imported, playerName)
+  return NLC.Scoring.WeeklyLootCount(imported, playerName)
+    + ((imported and imported.lootTotal) or 0)
+end
+
 function NLC.Scoring.GetImportedScore(playerName)
   local players = NLC.db.importData and NLC.db.importData.players
   if not players then return nil end
@@ -81,7 +100,10 @@ function NLC.Scoring.GetWarnings(imported, playerName)
     table.insert(warnings, "No web data")
     return warnings
   end
-  if imported.attendance and imported.attendance < 80 then
+  -- MÅ følge ATTENDANCE_REQUIREMENT i nordavind-web/lib/attendance.ts. Sto på
+  -- 80 fra sesong 1; kravet er 90 i sesong 2, så en spiller på 85 % tapte poeng
+  -- på nettsida uten at addonet sa fra.
+  if imported.attendance and imported.attendance < 90 then
     table.insert(warnings, string.format("Low attendance: %d%%", imported.attendance))
   end
   if imported.wclParse and imported.wclParse < 25 then
@@ -90,16 +112,7 @@ function NLC.Scoring.GetWarnings(imported, playerName)
   if imported.defensives and imported.defensives < 0.8 then
     table.insert(warnings, string.format("Low defensives: %.1f/fight", imported.defensives))
   end
-  -- Use in-game tracker once a reset has been recorded; otherwise fall back to import data.
-  -- (After Wednesday reset, counts[playerName] is nil — without this guard Lua would
-  --  fall through the `or` chain to imported.lootThisWeek from the previous week's import.)
-  local wl = NLC.db.weeklyLoot
-  local weeklyCount
-  if wl and wl.resetTimestamp and wl.resetTimestamp > 0 then
-    weeklyCount = (wl.counts and wl.counts[playerName]) or 0
-  else
-    weeklyCount = imported.lootThisWeek or 0
-  end
+  local weeklyCount = NLC.Scoring.WeeklyLootCount(imported, playerName)
   if weeklyCount > 0 then
     table.insert(warnings, string.format("%d loot denne uka", weeklyCount))
   end
