@@ -27,6 +27,16 @@ NLC.Utils.CLASS_COLORS = {
   WARRIOR     = { r = 0.78, g = 0.61, b = 0.43 },
 }
 
+-- Addonets versjon fra .toc. Sendes i ROLL_CALL_ACK så offiseren kan se hvem
+-- som kjører gammelt — en utdatert klient rangerer og viser annerledes uten å
+-- si fra. C_AddOns er den moderne veien; den globale finnes fortsatt som fallback.
+function NLC.Utils.AddonVersion()
+  local get = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+  if not get then return "?" end
+  local ok, v = pcall(get, "NordavindLC", "Version")
+  return (ok and v) or "?"
+end
+
 function NLC.Utils.ClassColoredName(name, class)
   local c = NLC.Utils.CLASS_COLORS[class]
   if not c then return name end

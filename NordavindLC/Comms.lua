@@ -27,13 +27,40 @@ end
 local commsQueue = {}
 local commsRestricted = false
 
-local function commsAreRestricted()
+-- Restriksjonstilstand per type, oppdatert fra event-payloaden.
+local restrictedTypes = {}
+
+-- Vi gater kun på Encounter og ChallengeMode. Combat er unntaket — comms virker
+-- der — og map-restriksjonen slår inn i instanser uten å stoppe meldinger.
+local function gatedTypes()
   local E = Enum and Enum.AddOnRestrictionType
-  if not (E and C_RestrictedActions and C_RestrictedActions.IsAddOnRestrictionActive) then
+  if not E then return nil end
+  return { E.Encounter, E.ChallengeMode }
+end
+
+local function recomputeRestricted()
+  local types = gatedTypes()
+  if not types then return false end
+  for _, t in ipairs(types) do
+    if t ~= nil and restrictedTypes[t] then return true end
+  end
+  return false
+end
+
+-- Ved innlasting har ingen event fyrt ennå, så API-et er eneste kilde til
+-- starttilstanden. Den kjenner ikke «Activating», men det gjør ingenting her:
+-- et vindu som allerede står åpent når vi lastes er enten aktivt eller ikke.
+local function seedFromApi()
+  local types = gatedTypes()
+  if not (types and C_RestrictedActions and C_RestrictedActions.IsAddOnRestrictionActive) then
     return false
   end
-  local function active(t) return t ~= nil and C_RestrictedActions.IsAddOnRestrictionActive(t) or false end
-  return active(E.Encounter) or active(E.ChallengeMode) or false
+  for _, t in ipairs(types) do
+    if t ~= nil and C_RestrictedActions.IsAddOnRestrictionActive(t) then
+      restrictedTypes[t] = true
+    end
+  end
+  return recomputeRestricted()
 end
 
 local function flushCommsQueue()
@@ -47,11 +74,21 @@ end
 
 local _restrictFrame = CreateFrame("Frame")
 _restrictFrame:RegisterEvent("ADDON_RESTRICTION_STATE_CHANGED")
-_restrictFrame:SetScript("OnEvent", function()
-  commsRestricted = commsAreRestricted()
+_restrictFrame:SetScript("OnEvent", function(_, _, restrictionType, state)
+  -- Tilstanden leses fra payloaden, ikke ved å polle
+  -- C_RestrictedActions.IsAddOnRestrictionActive. Payloaden har en egen
+  -- «Activating»-tilstand — på vei inn i restriksjonen — og meldinger sendt i
+  -- det vinduet forsvinner like stille som under «Active». Det vinduet treffer
+  -- akkurat encounter-start, som er når en council-sesjon typisk åpnes.
+  local S = Enum and Enum.AddOnRestrictionState
+  if restrictionType ~= nil and S then
+    local pa = (state == S.Active) or (state == S.Activating)
+    restrictedTypes[restrictionType] = pa or nil
+  end
+  commsRestricted = recomputeRestricted()
   if not commsRestricted then flushCommsQueue() end
 end)
-commsRestricted = commsAreRestricted()
+commsRestricted = seedFromApi()
 
 function NLC.Comms.IsRestricted() return commsRestricted end
 
@@ -130,11 +167,14 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
     end
 
   elseif msgType == "ROLL_CALL" then
-    NLC.Comms.Send("ROLL_CALL_ACK", "")
+    -- Versjonen ligger i ack-en, ikke i en egen runde. Rundturen kjøres
+    -- likevel ved hver council-start, og uten dette har offiseren ingen måte å
+    -- se at noen kjører en gammel versjon som rangerer annerledes.
+    NLC.Comms.Send("ROLL_CALL_ACK", NLC.Utils.AddonVersion())
 
   elseif msgType == "ROLL_CALL_ACK" then
     if NLC.Council.OnRollCallAck then
-      NLC.Council.OnRollCallAck(sender)
+      NLC.Council.OnRollCallAck(sender, data)
     end
 
   elseif msgType == "LOOT_REPORT" then

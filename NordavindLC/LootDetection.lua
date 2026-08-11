@@ -91,16 +91,15 @@ local function shouldTrackItem(itemLink, itemID)
   return true, ilvl or 0, equipLoc or ""
 end
 
--- True if addon comms are currently blocked. Defensive: if the 12.0 restriction API/enum
--- is missing, returns false (send normally — the encounter restriction lifts at
--- ENCOUNTER_END anyway, so this degrades to the old behaviour safely).
+-- True if addon comms are currently blocked.
+--
+-- Var en egen kopi av logikken i Comms.lua. To kopier av samme regel drev fra
+-- hverandre i det øyeblikket den ene lærte noe den andre ikke gjorde: Comms
+-- leser nå «Activating» fra event-payloaden, denne pollet API-et og så bare
+-- «Active». Nå spør vi den ene kilden. Degraderer fortsatt til false hvis
+-- 12.0-API-et mangler — den vakten ligger i Comms.
 local function commsAreRestricted()
-  local E = Enum and Enum.AddOnRestrictionType
-  if not (E and C_RestrictedActions and C_RestrictedActions.IsAddOnRestrictionActive) then
-    return false
-  end
-  local function active(t) return t ~= nil and C_RestrictedActions.IsAddOnRestrictionActive(t) or false end
-  return active(E.Encounter) or active(E.ChallengeMode) or false
+  return NLC.Comms and NLC.Comms.IsRestricted and NLC.Comms.IsRestricted() or false
 end
 
 -- Scan all bags for newly-looted tradeable items and add them to reportItems.
