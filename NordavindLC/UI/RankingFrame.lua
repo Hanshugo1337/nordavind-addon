@@ -212,13 +212,16 @@ function NLC.UI.ShowRanking(session, candidates)
     row:SetPoint("TOPLEFT", 0, -yOffset)
     row:Show()
 
-    -- Rank badge
-    local rc = RANK_COLORS[c.rank] or RANK_COLORS.trial
+    -- Rank badge. Rangen som VISES kan avvike fra den vi sorterer på: nettsida
+    -- sender backups som "bench" mens rangorden-bryteren er av. Raden skal
+    -- fortsatt si BACKUP — det er sorteringen som er snudd, ikke rangen.
+    local vist = c.displayRank or c.rank
+    local rc = RANK_COLORS[vist] or RANK_COLORS.trial
     local rankText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     rankText:SetPoint("LEFT", COL.rank, 0)
     rankText:SetWidth(80)
     rankText:SetJustifyH("LEFT")
-    rankText:SetText(string.format("|cff%02x%02x%02x%s|r", rc.r * 255, rc.g * 255, rc.b * 255, (c.rank or "?"):upper()))
+    rankText:SetText(string.format("|cff%02x%02x%02x%s|r", rc.r * 255, rc.g * 255, rc.b * 255, (vist or "?"):upper()))
 
     -- Name (class colored, larger font) with player tooltip
     local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -250,7 +253,8 @@ function NLC.UI.ShowRanking(session, candidates)
       GameTooltip:AddDoubleLine("Equipped ilvl", tostring(c.equippedIlvl or "?"), 0.6, 0.6, 0.6, 1, 1, 1)
       GameTooltip:AddDoubleLine("ilvl diff", (c.ilvlDiff and c.ilvlDiff > 0 and "+" or "") .. tostring(c.ilvlDiff or 0), 0.6, 0.6, 0.6, 1, 1, 1)
       GameTooltip:AddDoubleLine("Tier pieces", tostring(c.tierCount or 0) .. "pc", 0.6, 0.6, 0.6, 1, 1, 1)
-      GameTooltip:AddDoubleLine("Rank", (c.rank or "?"):upper(), 0.6, 0.6, 0.6, 1, 1, 1)
+      -- `vist` er en local i rad-løkka og finnes ikke i denne closuren.
+      GameTooltip:AddDoubleLine("Rank", ((c.displayRank or c.rank) or "?"):upper(), 0.6, 0.6, 0.6, 1, 1, 1)
       if c.note then
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("Note: " .. c.note, 0.8, 0.8, 0.8, true)

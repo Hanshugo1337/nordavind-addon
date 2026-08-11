@@ -4,9 +4,14 @@
 local NLC = NordavindLC_NS
 
 local catOrder = { upgrade = 1, catalyst = 2, offspec = 3, tmog = 4 }
--- Rank er et hardt skille: en trial kan aldri rangeres over en raider, slik
--- sesong 2-reglene lover guilden. Verdiene kommer fra nettsiden i små bokstaver.
-local rankOrder = { raider = 1, backup = 2, trial = 3 }
+-- Rank er et hardt skille. Verdiene kommer fra nettsiden i små bokstaver.
+--
+-- "bench" sendes for backups mens rangorden-bryteren er av: ved sesongstart
+-- står alle på trial, og gear skal til dem som konkurrerer om faste raidplasser
+-- — ikke til benken. Den treffer ellers `or 99` nedenfor og havner sist uansett;
+-- den står her eksplisitt så oppførselen er lest og villet, ikke en heldig
+-- bivirkning. Den ekte rangen kommer som `displayRank` og brukes kun til visning.
+local rankOrder = { raider = 1, backup = 2, trial = 3, bench = 4 }
 
 local activeSessions = {}    -- list of session tables (one per item)
 local currentWizardIndex = 0 -- which item officer is viewing in wizard
@@ -287,6 +292,7 @@ function NLC.Council.BuildRanking(session)
       breakdown = (not roll) and breakdown or nil,
       warnings = warnings,
       rank = imported and imported.rank or "trial",
+      displayRank = imported and imported.displayRank or nil,
       role = role,
       equippedIlvl = interest.equippedIlvl,
       equippedLink = interest.equippedLink,
