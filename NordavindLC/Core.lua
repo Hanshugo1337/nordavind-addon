@@ -532,6 +532,14 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.Council._testSession = nil
     NLC.Utils.Print("Test mode ended.")
 
+  elseif cmd == "roster" then
+    -- Fanger hele guild-rosteret med noter, for opplasting via companion.
+    if arg:lower() == "status" then
+      NLC.Roster.Status()
+    else
+      NLC.Roster.Capture()
+    end
+
   else
     NLC.Utils.Print("Commands:")
     NLC.Utils.Print("  /nordlc activate — Aktiver addon")
@@ -540,6 +548,7 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.Utils.Print("  /nordlc council — Gjenåpne aktivt loot council vindu")
     NLC.Utils.Print("  /nordlc timer <sek> — Sett respons-timer (min 30, default 90)")
     NLC.Utils.Print("  /nordlc debug — Toggle loot detection debug-logging")
+    NLC.Utils.Print("  /nordlc roster — Fang guild-rosteret med noter (krever /reload etterpå)")
   NLC.Utils.Print("  /nordlc history — Vis award historikk")
   NLC.Utils.Print("  /nordlc trade — Vis items som venter på trade")
     NLC.Utils.Print("  /nordlc pending — Vis ufordelte items")

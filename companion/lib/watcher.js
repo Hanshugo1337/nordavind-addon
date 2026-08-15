@@ -47,12 +47,17 @@ function replaceGlobalAssignment(content, name, replacement) {
 }
 
 class SavedVarsWatcher {
-  constructor(wowPath, accountName) {
+  constructor(wowPath, accountName, statePath) {
     this.svPath = path.join(
       wowPath, "_retail_", "WTF", "Account", accountName,
       "SavedVariables", "NordavindLC.lua"
     );
-    this.statePath = path.join(__dirname, "..", "companion-state.json");
+    // I en PAKKET app ligger __dirname inne i app.asar, som er skrivebeskyttet.
+    // Uten en skrivbar sti kaster _saveState hver gang, og da glemmes bade
+    // eksport-telleren og sist opplastede roster — som lastes opp paa nytt hver
+    // syklus. Electron sender inn app.getPath("userData"); dev faller tilbake
+    // til repo-rota.
+    this.statePath = statePath || path.join(__dirname, "..", "companion-state.json");
     // Independent mtime tracking per stream — a shared mtime made whichever ran
     // second (exports vs edits) skip the file it hadn't processed yet.
     this.lastExportMtime = 0;
@@ -61,6 +66,7 @@ class SavedVarsWatcher {
     const state = this._loadState();
     this.lastExportCount = state.exportCount || 0;
     this.lastEditCount = state.editCount || 0;
+    this.lastRosterCapturedAt = state.rosterCapturedAt || 0;
   }
 
   _loadState() {
@@ -69,10 +75,17 @@ class SavedVarsWatcher {
   }
 
   _saveState() {
-    fs.writeFileSync(this.statePath, JSON.stringify({
+    // Skal aldri kaste: en feilet tilstandsskriving maa ikke maskere seg som
+    // en feilet opplasting i _processExports/_processRoster.
+    try {
+      fs.writeFileSync(this.statePath, JSON.stringify({
       exportCount: this.lastExportCount,
       editCount: this.lastEditCount,
-    }), "utf-8");
+      rosterCapturedAt: this.lastRosterCapturedAt || 0,
+      }), "utf-8");
+    } catch (err) {
+      console.error(`[watcher] Kunne ikke lagre tilstand til ${this.statePath}: ${err.message}`);
+    }
   }
 
   exists() {
@@ -167,6 +180,32 @@ class SavedVarsWatcher {
     fs.writeFileSync(tmp, existing, "utf-8");
     fs.renameSync(tmp, this.svPath);
   }
+  checkPendingRoster() {
+    const stat = fs.statSync(this.svPath, { throwIfNoEntry: false });
+    if (!stat) return null;
+
+    const vars = this.read();
+    const roster = vars?.NordavindLC_DB?.pendingRosterImport;
+    if (!roster?.characters) return null;
+
+    // Oeyeblikksbilde, ikke koe: last opp kun hvis fangsten er nyere enn den
+    // vi allerede har sendt. Ellers lastes samme roster opp ved hver syklus.
+    const capturedAt = Number(roster.capturedAt) || 0;
+    if (capturedAt <= (this.lastRosterCapturedAt || 0)) return null;
+
+    return {
+      capturedAt: capturedAt * 1000, // Lua time() er sekunder, JS bruker ms
+      characters: Array.isArray(roster.characters)
+        ? roster.characters
+        : Object.values(roster.characters),
+    };
+  }
+
+  markRosterSent(capturedAt) {
+    this.lastRosterCapturedAt = Math.floor(capturedAt / 1000);
+    this._saveState();
+  }
+
 }
 
 module.exports = { SavedVarsWatcher };

@@ -30,6 +30,21 @@ class ApiClient {
     return res.json();
   }
 
+  async uploadRoster(payload) {
+    const res = await fetch(`${this.baseUrl}/api/roster`, {
+      method: "POST",
+      headers: { "x-api-key": this.apiKey, "Content-Type": "application/json", "Host": "nordavind.cc" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(30000), // ~400 karakterer, tregere enn et award
+    });
+    if (!res.ok) {
+      const err = new Error(`Roster upload failed: ${res.status} ${await res.text()}`);
+      err.status = res.status;
+      throw err;
+    }
+    return res.json();
+  }
+
   async editAward({ originalTimestamp, item, newAwardedTo, newCategory }) {
     const res = await fetch(`${this.baseUrl}/api/loot/addon`, {
       method: "PATCH",

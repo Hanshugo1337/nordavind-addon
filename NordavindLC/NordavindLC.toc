@@ -24,6 +24,7 @@ Utils.lua
 Core.lua
 Comms.lua
 Scoring.lua
+Roster.lua
 LootDetection.lua
 Council.lua
 UI/Theme.lua

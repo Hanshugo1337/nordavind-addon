@@ -6,10 +6,10 @@ const { SavedVarsWatcher } = require("./watcher");
 // Electron/Express-agnostic sync engine. Owns the score fetch/write loop and the
 // export/edit poll with backpressure. Fed by the host (main.js / index.js).
 class SyncEngine {
-  constructor({ webUrl, apiKey, wowPath, account }) {
+  constructor({ webUrl, apiKey, wowPath, account, statePath }) {
     this.webUrl = webUrl;
     this.api = new ApiClient(webUrl, apiKey);
-    this.watcher = new SavedVarsWatcher(wowPath, account);
+    this.watcher = new SavedVarsWatcher(wowPath, account, statePath);
     this.wowPath = wowPath;
     this.account = account;
     this.lastScores = null;
@@ -117,12 +117,36 @@ class SyncEngine {
     } catch { /* file not ready yet */ }
   }
 
+  async _processRoster() {
+    try {
+      const roster = this.watcher.checkPendingRoster();
+      if (!roster) return;
+      try {
+        const svar = await this.api.uploadRoster(roster);
+        this.watcher.markRosterSent(roster.capturedAt);
+        console.log(`[roster] Lastet opp ${roster.characters.length} karakterer` +
+          (svar?.counts ? ` (${svar.counts.withNote} med note)` : ""));
+      } catch (err) {
+        this.lastError = err.message;
+        if (this._isPermanent(err)) {
+          // Serveren sa at rosteret er ubrukelig — typisk avkuttet. Aa sende
+          // det igjen for alltid hjelper ingen; brukeren maa fange paa nytt.
+          console.warn(`[roster] Avvist av serveren, hopper over: ${err.message}`);
+          this.watcher.markRosterSent(roster.capturedAt);
+          return;
+        }
+        console.error("[roster] Opplasting feilet:", err.message);
+      }
+    } catch { /* file not ready yet */ }
+  }
+
   async pollOnce() {
     if (this.isSyncing) return;
     this.isSyncing = true;
     try {
       await this._processExports();
       await this._processEdits();
+      await this._processRoster();
     } finally {
       this.isSyncing = false;
     }
