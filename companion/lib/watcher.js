@@ -61,6 +61,7 @@ class SavedVarsWatcher {
     const state = this._loadState();
     this.lastExportCount = state.exportCount || 0;
     this.lastEditCount = state.editCount || 0;
+    this.lastRosterCapturedAt = state.rosterCapturedAt || 0;
   }
 
   _loadState() {
@@ -72,6 +73,7 @@ class SavedVarsWatcher {
     fs.writeFileSync(this.statePath, JSON.stringify({
       exportCount: this.lastExportCount,
       editCount: this.lastEditCount,
+      rosterCapturedAt: this.lastRosterCapturedAt || 0,
     }), "utf-8");
   }
 
@@ -167,6 +169,32 @@ class SavedVarsWatcher {
     fs.writeFileSync(tmp, existing, "utf-8");
     fs.renameSync(tmp, this.svPath);
   }
+  checkPendingRoster() {
+    const stat = fs.statSync(this.svPath, { throwIfNoEntry: false });
+    if (!stat) return null;
+
+    const vars = this.read();
+    const roster = vars?.NordavindLC_DB?.pendingRosterImport;
+    if (!roster?.characters) return null;
+
+    // Oeyeblikksbilde, ikke koe: last opp kun hvis fangsten er nyere enn den
+    // vi allerede har sendt. Ellers lastes samme roster opp ved hver syklus.
+    const capturedAt = Number(roster.capturedAt) || 0;
+    if (capturedAt <= (this.lastRosterCapturedAt || 0)) return null;
+
+    return {
+      capturedAt: capturedAt * 1000, // Lua time() er sekunder, JS bruker ms
+      characters: Array.isArray(roster.characters)
+        ? roster.characters
+        : Object.values(roster.characters),
+    };
+  }
+
+  markRosterSent(capturedAt) {
+    this.lastRosterCapturedAt = Math.floor(capturedAt / 1000);
+    this._saveState();
+  }
+
 }
 
 module.exports = { SavedVarsWatcher };
