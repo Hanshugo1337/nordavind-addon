@@ -64,7 +64,7 @@ local function lesRoster()
   local karakterer = {}
 
   for i = 1, totalt do
-    local navn, rangNavn, rankIndex, niva, _, _, publicNote = GetGuildRosterInfo(i)
+    local navn, rangNavn, rankIndex, niva, _, _, publicNote, officerNote = GetGuildRosterInfo(i)
     if navn then
       local aar, mnd, dag, time = GetGuildRosterLastOnline(i)
       local dagerOffline = ((aar or 0) * 365) + ((mnd or 0) * 30) + (dag or 0)
@@ -78,6 +78,9 @@ local function lesRoster()
         rankName    = rangNavn,
         level       = niva,
         publicNote  = publicNote or "",
+        -- Officer note er tom for den som mangler rettighet. Tas med fordi
+        -- identitet ofte staar der i stedet for i den offentlige noten.
+        officerNote = officerNote or "",
         daysOffline = dagerOffline,
       })
     end
@@ -87,14 +90,15 @@ local function lesRoster()
 end
 
 local function oppsummer(karakterer)
-  local medNote, tomme = 0, 0
+  local medNote, tomme, medOfficerNote = 0, 0, 0
   local perRang = {}
   for _, k in ipairs(karakterer) do
+    if k.officerNote ~= "" then medOfficerNote = medOfficerNote + 1 end
     if k.publicNote ~= "" then medNote = medNote + 1 else tomme = tomme + 1 end
     local n = k.rankName or ("rank " .. tostring(k.rankIndex))
     perRang[n] = (perRang[n] or 0) + 1
   end
-  return medNote, tomme, perRang
+  return medNote, tomme, perRang, medOfficerNote
 end
 
 --- Fanger rosteret og legger det i SavedVariables.
@@ -135,10 +139,10 @@ function NLC.Roster.Capture()
       characters = karakterer,
     }
 
-    local medNote, tomme, perRang = oppsummer(karakterer)
+    local medNote, tomme, perRang, medOfficerNote = oppsummer(karakterer)
 
     NLC.Utils.Print(("Fanget |cff55ff55%d|r karakterer (GetNumGuildMembers sa %d)."):format(#karakterer, totalt))
-    NLC.Utils.Print(("  Med note: |cff55ff55%d|r   Uten note: |cffffff55%d|r"):format(medNote, tomme))
+    NLC.Utils.Print(("  Med note: |cff55ff55%d|r   Uten note: |cffffff55%d|r   Officer note: |cff55ff55%d|r"):format(medNote, tomme, medOfficerNote))
     for rang, antall in pairs(perRang) do
       NLC.Utils.Print(("    %s: %d"):format(rang, antall))
     end

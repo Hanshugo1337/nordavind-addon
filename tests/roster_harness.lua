@@ -24,8 +24,8 @@ GetNumGuildMembers = function() return #ROSTER end
 GetGuildRosterInfo = function(i)
   local r = ROSTER[i]
   if not r then return nil end
-  -- navn, rangNavn, rankIndex(0-basert!), niva, klasse, sone, publicNote
-  return r.navn, r.rang, r.rankIndex0, 80, "Warrior", "Valdrakken", r.note
+  -- navn, rangNavn, rankIndex(0-basert!), niva, klasse, sone, publicNote, officerNote
+  return r.navn, r.rang, r.rankIndex0, 80, "Warrior", "Valdrakken", r.note, r.onote
 end
 GetGuildRosterLastOnline = function(i)
   local r = ROSTER[i]
@@ -78,6 +78,7 @@ end
 -- Én raider for aa sjekke rangforskyvning presist
 ROSTER[1].rankIndex0 = 4        -- 0-basert => «Rank 5: Raider»
 ROSTER[1].navn = "Revo-TwistingNether"
+ROSTER[2].onote = "disc: bjango"   -- officer note skal ogsaa fanges
 
 utskrift = {}
 NLC.Roster.Capture()
@@ -95,6 +96,13 @@ assert(lagret.characters[2].rankIndex == 9,
 -- Realm maa strippes for aa kunne matche mot Discord
 assert(lagret.characters[1].name == "Revo",
   "navn ble '" .. tostring(lagret.characters[1].name) .. "', forventet 'Revo'")
+
+-- Officer note maa vaere med — identitet staar ofte der i stedet for i den
+-- offentlige noten.
+assert(lagret.characters[2].officerNote == "disc: bjango",
+  "officerNote ble '" .. tostring(lagret.characters[2].officerNote) .. "'")
+assert(lagret.characters[1].officerNote == "",
+  "manglende officer note skal bli tom streng, ble " .. tostring(lagret.characters[1].officerNote))
 
 assert(_G.__visteOffline == true, "SetGuildRosterShowOffline ble ikke kalt med true")
 assert(_G.__baOmRoster == true, "GuildRoster() ble aldri kalt")
