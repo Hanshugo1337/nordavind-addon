@@ -58,3 +58,39 @@ test("samme roster lastes ikke opp to ganger", () => {
   w.markRosterSent(foerste.capturedAt);
   assert.strictEqual(w.checkPendingRoster(), null, "samme roster ble hentet paa nytt");
 });
+
+test("sync-engine laster opp rosteret og markerer det sendt", async () => {
+  const { SyncEngine } = require("../lib/sync-engine");
+  const sendt = [];
+  const watcher = {
+    checkPendingExports: () => [],
+    checkPendingEdits: () => [],
+    checkPendingRoster: () => (sendt.length ? null : { capturedAt: 5000, characters: [{ name: "Revo" }] }),
+    markRosterSent: (t) => sendt.push(t),
+  };
+  const api = { uploadRoster: async (p) => ({ ok: true, counts: { characters: p.characters.length } }) };
+  const eng = new SyncEngine({ webUrl: "http://x", apiKey: "k", wowPath: "C:/nope", account: "A" });
+  eng.watcher = watcher;
+  eng.api = api;
+  await eng._processRoster();
+  assert.deepStrictEqual(sendt, [5000]);
+});
+
+test("avvist roster (4xx) markeres sendt saa koeen ikke laaser seg", async () => {
+  const { SyncEngine } = require("../lib/sync-engine");
+  const sendt = [];
+  const watcher = {
+    checkPendingRoster: () => ({ capturedAt: 5000, characters: [] }),
+    markRosterSent: (t) => sendt.push(t),
+  };
+  const api = {
+    uploadRoster: async () => { const e = new Error("avvist"); e.status = 422; throw e; },
+  };
+  const eng = new SyncEngine({ webUrl: "http://x", apiKey: "k", wowPath: "C:/nope", account: "A" });
+  eng.watcher = watcher;
+  eng.api = api;
+  await eng._processRoster();
+  // Serveren sa at dette rosteret er ubrukelig — aa sende det igjen for alltid
+  // hjelper ingen. Brukeren maa fange paa nytt.
+  assert.deepStrictEqual(sendt, [5000]);
+});
