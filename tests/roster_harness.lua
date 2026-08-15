@@ -94,6 +94,9 @@ assert(lagret.characters[2].rankIndex == 9,
   "rankIndex ble " .. lagret.characters[2].rankIndex .. ", forventet 9 (Sosial / M+)")
 
 -- Realm maa strippes for aa kunne matche mot Discord
+assert(lagret.characters[1].class == "Warrior",
+  "klassen ble ikke fanget: " .. tostring(lagret.characters[1].class))
+
 assert(lagret.characters[1].name == "Revo",
   "navn ble '" .. tostring(lagret.characters[1].name) .. "', forventet 'Revo'")
 

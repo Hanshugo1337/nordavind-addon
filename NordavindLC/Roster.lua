@@ -64,7 +64,7 @@ local function lesRoster()
   local karakterer = {}
 
   for i = 1, totalt do
-    local navn, rangNavn, rankIndex, niva, _, _, publicNote, officerNote = GetGuildRosterInfo(i)
+    local navn, rangNavn, rankIndex, niva, klasse, _, publicNote, officerNote = GetGuildRosterInfo(i)
     if navn then
       local aar, mnd, dag, time = GetGuildRosterLastOnline(i)
       local dagerOffline = ((aar or 0) * 365) + ((mnd or 0) * 30) + (dag or 0)
@@ -77,6 +77,9 @@ local function lesRoster()
         rankIndex   = (rankIndex or 0) + 1,  -- 0-basert API -> 1-basert som i Guild Control
         rankName    = rangNavn,
         level       = niva,
+        -- Klassen trengs for aa opprette karakteren riktig paa nettsida.
+        -- Ble kastet foer, og alle koblede karakterer fikk «Unknown».
+        class       = klasse or "",
         publicNote  = publicNote or "",
         -- Officer note er tom for den som mangler rettighet. Tas med fordi
         -- identitet ofte staar der i stedet for i den offentlige noten.
