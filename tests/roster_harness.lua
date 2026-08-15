@@ -49,6 +49,7 @@ CreateFrame = function()
 end
 
 NordavindLC_DB = {}
+SlashCmdList = {}   -- Roster.lua registrerer sin egen /nordroster
 
 local NLC = { Utils = { Print = function(m) table.insert(utskrift, m) end } }
 

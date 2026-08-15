@@ -171,6 +171,18 @@ function NLC.Roster.Capture()
   end
 end
 
+-- Egen slash-kommando, slik at fila kan slippes inn i en hvilken som helst
+-- versjon av addonet uten aa roere Core.lua. `/nordlc roster` finnes ogsaa
+-- naar Core.lua er oppdatert; denne virker uansett.
+SLASH_NORDROSTER1 = "/nordroster"
+SlashCmdList["NORDROSTER"] = function(msg)
+  if (msg or ""):trim():lower() == "status" then
+    NLC.Roster.Status()
+  else
+    NLC.Roster.Capture()
+  end
+end
+
 --- Viser hva som ligger klart til opplasting.
 function NLC.Roster.Status()
   local ventende = NordavindLC_DB and NordavindLC_DB.pendingRosterImport
