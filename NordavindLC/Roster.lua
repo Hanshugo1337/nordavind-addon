@@ -1,4 +1,9 @@
-local ADDON_NAME, NLC = ...
+-- Roster.lua
+-- Namespacet er GLOBALT i dette addonet (NordavindLC_NS), ikke `...`-varargen.
+-- Bruker man `local _, NLC = ...` faar man addonets private tabell i stedet,
+-- og da er NLC.Utils nil.
+NordavindLC_NS = NordavindLC_NS or {}
+local NLC = NordavindLC_NS
 
 --[[
   Roster.lua — leser hele guild-rosteret med offentlige noter, og legger det i

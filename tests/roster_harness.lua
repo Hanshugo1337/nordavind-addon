@@ -51,11 +51,18 @@ end
 NordavindLC_DB = {}
 SlashCmdList = {}   -- Roster.lua registrerer sin egen /nordroster
 
-local NLC = { Utils = { Print = function(m) table.insert(utskrift, m) end } }
+-- Namespacet er GLOBALT i dette addonet, akkurat som Utils.lua setter det opp.
+-- Riggen MAA etterligne det. Tidligere matet den inn sin egen NLC-tabell som
+-- chunk-argument, og da kunne den umulig fange at Roster.lua brukte feil
+-- namespace — som var nettopp feilen som slo til in-game.
+NordavindLC_NS = { Utils = { Print = function(m) table.insert(utskrift, m) end } }
+local NLC = NordavindLC_NS
 
--- --- Last Roster.lua med samme vararg som WoW gir ---
+-- --- Last Roster.lua slik WoW gjoer: kun addon-navnet som vararg ---
 local chunk = assert(loadfile("NordavindLC/Roster.lua"))
-chunk("NordavindLC", NLC)
+chunk("NordavindLC")
+
+assert(NLC.Roster, "Roster.lua festet seg ikke paa det globale namespacet")
 
 -- --- Scenario 1: fullt roster ---
 ROSTER = {}
