@@ -47,12 +47,17 @@ function replaceGlobalAssignment(content, name, replacement) {
 }
 
 class SavedVarsWatcher {
-  constructor(wowPath, accountName) {
+  constructor(wowPath, accountName, statePath) {
     this.svPath = path.join(
       wowPath, "_retail_", "WTF", "Account", accountName,
       "SavedVariables", "NordavindLC.lua"
     );
-    this.statePath = path.join(__dirname, "..", "companion-state.json");
+    // I en PAKKET app ligger __dirname inne i app.asar, som er skrivebeskyttet.
+    // Uten en skrivbar sti kaster _saveState hver gang, og da glemmes bade
+    // eksport-telleren og sist opplastede roster — som lastes opp paa nytt hver
+    // syklus. Electron sender inn app.getPath("userData"); dev faller tilbake
+    // til repo-rota.
+    this.statePath = statePath || path.join(__dirname, "..", "companion-state.json");
     // Independent mtime tracking per stream — a shared mtime made whichever ran
     // second (exports vs edits) skip the file it hadn't processed yet.
     this.lastExportMtime = 0;
@@ -70,11 +75,17 @@ class SavedVarsWatcher {
   }
 
   _saveState() {
-    fs.writeFileSync(this.statePath, JSON.stringify({
+    // Skal aldri kaste: en feilet tilstandsskriving maa ikke maskere seg som
+    // en feilet opplasting i _processExports/_processRoster.
+    try {
+      fs.writeFileSync(this.statePath, JSON.stringify({
       exportCount: this.lastExportCount,
       editCount: this.lastEditCount,
       rosterCapturedAt: this.lastRosterCapturedAt || 0,
-    }), "utf-8");
+      }), "utf-8");
+    } catch (err) {
+      console.error(`[watcher] Kunne ikke lagre tilstand til ${this.statePath}: ${err.message}`);
+    }
   }
 
   exists() {

@@ -6,10 +6,10 @@ const { SavedVarsWatcher } = require("./watcher");
 // Electron/Express-agnostic sync engine. Owns the score fetch/write loop and the
 // export/edit poll with backpressure. Fed by the host (main.js / index.js).
 class SyncEngine {
-  constructor({ webUrl, apiKey, wowPath, account }) {
+  constructor({ webUrl, apiKey, wowPath, account, statePath }) {
     this.webUrl = webUrl;
     this.api = new ApiClient(webUrl, apiKey);
-    this.watcher = new SavedVarsWatcher(wowPath, account);
+    this.watcher = new SavedVarsWatcher(wowPath, account, statePath);
     this.wowPath = wowPath;
     this.account = account;
     this.lastScores = null;

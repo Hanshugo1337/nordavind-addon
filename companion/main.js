@@ -50,7 +50,9 @@ function buildTrayMenu() {
 
 function startEngine() {
   const c = getConfig();
-  engine = new SyncEngine({ webUrl: c.webUrl, apiKey: c.apiKey, wowPath: c.wowPath, account: c.account });
+  // userData er skrivbart; __dirname ligger inne i app.asar i en pakket app.
+  const statePath = path.join(app.getPath("userData"), "companion-state.json");
+  engine = new SyncEngine({ webUrl: c.webUrl, apiKey: c.apiKey, wowPath: c.wowPath, account: c.account, statePath });
   engine.start();
   setInterval(updateTray, 3000);
 }

@@ -94,3 +94,25 @@ test("avvist roster (4xx) markeres sendt saa koeen ikke laaser seg", async () =>
   // hjelper ingen. Brukeren maa fange paa nytt.
   assert.deepStrictEqual(sendt, [5000]);
 });
+
+test("statePath kan injiseres — pakket app maa ha en skrivbar sti", () => {
+  // I en pakket app ligger __dirname inne i app.asar (skrivebeskyttet). Uten
+  // injeksjon kastet _saveState hver gang, og rosteret ble lastet opp paa nytt
+  // hver syklus fordi capturedAt aldri overlevde.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nlc-"));
+  const egen = path.join(root, "min-state.json");
+  const w = new SavedVarsWatcher(root, "TEST", egen);
+  assert.strictEqual(w.statePath, egen);
+
+  w.lastRosterCapturedAt = 4242;
+  w._saveState();
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(egen, "utf-8")).rosterCapturedAt, 4242);
+});
+
+test("_saveState kaster ikke naar stien er uskrivbar", () => {
+  // Ellers maskerer en feilet tilstandsskriving seg som en feilet opplasting.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "nlc-"));
+  const umulig = path.join(root, "finnes", "ikke", "state.json");
+  const w = new SavedVarsWatcher(root, "TEST", umulig);
+  assert.doesNotThrow(() => w._saveState());
+});
