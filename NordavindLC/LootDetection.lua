@@ -21,7 +21,9 @@
 -- _setDetected so the existing "Loot Detected" panel (GetDroppedItems/RemoveItem) is unchanged.
 --
 -- Technique reference only (RCLootCouncil): which WoW APIs exist in 12.0. No RC code,
--- names, structure or text.
+-- names, structure or text. Read again at 3.23.1 (2026-08-18) for two behaviours we
+-- were missing: that Need must be checked before it is rolled, and that auto-rolls
+-- want a short delay. Both are reimplemented here from the API, not from their source.
 
 local NLC = NordavindLC_NS
 
@@ -101,6 +103,34 @@ end
 local function commsAreRestricted()
   return NLC.Comms and NLC.Comms.IsRestricted and NLC.Comms.IsRestricted() or false
 end
+
+-- Blizzard's roll types for RollOnLoot. Disenchant (3) is deliberately absent:
+-- the council decides what gets sharded, never the auto-roller.
+local ROLL_PASS, ROLL_NEED, ROLL_GREED, ROLL_TRANSMOG = 0, 1, 2, 4
+
+-- Auto-rolls are deferred a frame or two. Landing inside the event handler means
+-- racing any other addon that rebuilds the roll frame, and a call that arrives
+-- mid-rebuild is dropped with no error to show for it.
+local function rollLater(rollID, rollType)
+  C_Timer.After(0.05, function() RollOnLoot(rollID, rollType) end)
+end
+
+-- The leader needs the item in their bags for the council to hand out, so we roll
+-- Need on their behalf. But Need is only offered for what the leader's own spec can
+-- equip — a plate leader cannot Need a leather drop. That call is refused silently,
+-- and since every other raider auto-passes, the item would end the roll with no
+-- valid entry at all and be lost. Transmog and Greed are always available, so we
+-- step down to those rather than gamble on Need being allowed.
+local function leaderRollType(rollID)
+  local _, _, _, _, _, canNeed, _, _, _, _, _, _, canTransmog = GetLootRollItemInfo(rollID)
+  if canNeed then return ROLL_NEED end
+  if canTransmog then return ROLL_TRANSMOG end
+  return ROLL_GREED
+end
+
+-- Exposed for tests/lootroll_harness.lua only; nothing in the addon calls this.
+-- Same underscore convention as _setDetected below.
+NLC.LootDetection._leaderRollType = leaderRollType
 
 -- Scan all bags for newly-looted tradeable items and add them to reportItems.
 function NLC.LootDetection.ScanBags()
@@ -204,15 +234,19 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
     local link = GetLootRollItemLink(rollID)
     local isLeader = UnitIsGroupLeader("player")
     if isLeader then
-      RollOnLoot(rollID, 1)
+      local rollType = leaderRollType(rollID)
+      if rollType ~= ROLL_NEED then
+        dbg("Need not offered on " .. tostring(link) .. ", rolling " .. rollType .. " instead.")
+      end
+      rollLater(rollID, rollType)
     else
       if link then
         local _, _, _, _, _, itemType = C_Item.GetItemInfo(link)
         if itemType ~= "Miscellaneous" and itemType ~= "Companion Pets" then
-          RollOnLoot(rollID, 0)
+          rollLater(rollID, ROLL_PASS)
         end
       else
-        RollOnLoot(rollID, 0)
+        rollLater(rollID, ROLL_PASS)
       end
     end
   end

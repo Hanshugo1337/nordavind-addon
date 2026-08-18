@@ -28,6 +28,11 @@ Sesong 2-releasen. Alt siden 1.8.0 (16. juni) — sesong 2-reglene, officer-avst
 - **Kunngjøring i raid warning** ved tildeling, endring og DE/bank/fri.
 - **Egen dropdown** erstatter de ødelagte `MenuUtil`-menyene.
 
+### Auto-rull
+
+- **Raidlederen ruller ikke lenger Need på blindt.** Need er bare tilbudt på det egen spec kan bruke — en plate-leder kan ikke Neede en leather-del. Kallet ble da forkastet i stillhet, og siden alle andre auto-passer, endte itemet uten et eneste gyldig rull. Nå sjekkes `canNeed` først, med Transmog og deretter Greed som fallback. Disenchant velges aldri automatisk; det er councilets avgjørelse.
+- **Auto-rull utsettes 0,05 sekund.** Et kall som lander mens et annet addon bygger om rull-framen forsvinner uten feilmelding.
+
 ### Roster-import
 
 - **`/nordroster`** fanger hele guild-rosteret med public notes, officer notes, rang, klasse og realm, og sender det via companion til nordavind.cc for godkjenning.
