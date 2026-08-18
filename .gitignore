@@ -1,0 +1,8 @@
+# Byggeartefakter — pakkes av CI fra tag, hoerer ikke hjemme i repoet.
+*.zip
+*.exe
+
+# Lokale datadumper. roster_dump.json inneholder medlemsnavn og officer notes.
+roster_dump.json
+
+# companion/ har sin egen .gitignore for node_modules og dist.
