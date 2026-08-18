@@ -17,6 +17,7 @@ local utskrift = {}
 -- --- WoW-API-stubber ---
 IsInGuild = function() return true end
 time = function() return 1755280000 end
+GetNormalizedRealmName = function() return "TwistingNether" end
 
 local ROSTER  -- settes per scenario
 
@@ -79,6 +80,7 @@ end
 ROSTER[1].rankIndex0 = 4        -- 0-basert => «Rank 5: Raider»
 ROSTER[1].navn = "Revo-TwistingNether"
 ROSTER[2].onote = "disc: bjango"   -- officer note skal ogsaa fanges
+ROSTER[3].navn = "Utenrealm"       -- ingen suffiks => hjemrealm
 
 utskrift = {}
 NLC.Roster.Capture()
@@ -94,6 +96,9 @@ assert(lagret.characters[2].rankIndex == 9,
   "rankIndex ble " .. lagret.characters[2].rankIndex .. ", forventet 9 (Sosial / M+)")
 
 -- Realm maa strippes for aa kunne matche mot Discord
+assert(lagret.characters[1].realm == "TwistingNether",
+  "realm fra suffiks ble " .. tostring(lagret.characters[1].realm))
+
 assert(lagret.characters[1].class == "Warrior",
   "klassen ble ikke fanget: " .. tostring(lagret.characters[1].class))
 
@@ -106,6 +111,11 @@ assert(lagret.characters[2].officerNote == "disc: bjango",
   "officerNote ble '" .. tostring(lagret.characters[2].officerNote) .. "'")
 assert(lagret.characters[1].officerNote == "",
   "manglende officer note skal bli tom streng, ble " .. tostring(lagret.characters[1].officerNote))
+
+assert(lagret.characters[3].realm == "TwistingNether",
+  "navn uten suffiks skal faa hjemrealm, ble " .. tostring(lagret.characters[3].realm))
+assert(lagret.characters[3].name == "Utenrealm",
+  "navn uten suffiks ble " .. tostring(lagret.characters[3].name))
 
 assert(_G.__visteOffline == true, "SetGuildRosterShowOffline ble ikke kalt med true")
 assert(_G.__baOmRoster == true, "GuildRoster() ble aldri kalt")

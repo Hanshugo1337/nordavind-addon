@@ -38,11 +38,19 @@ NLC.Roster = {}
 local MIN_FORVENTET = 50   -- under dette er rosteret nesten sikkert avkuttet
 local TIMEOUT_SEK   = 15   -- GuildRoster() er throttlet til ~10s
 
--- Navn kommer som «Revo-TwistingNether». Realm maa bort foer matching mot
--- Discord — karakternavn kan ikke inneholde bindestrek, saa dette er trygt.
-local function stripRealm(navn)
-  if not navn then return nil end
-  return navn:match("^([^-]+)") or navn
+-- Navn kommer som «Revo-TwistingNether» for spillere paa ANNEN realm enn
+-- guildens hjemrealm; ellers bare «Revo». Guilden er cross-realm (Draenor,
+-- Tarren Mill, Kazzak, Darksorrow er alle i bruk), saa realm maa fanges — to
+-- spillere paa ulike realms kan hete det samme.
+--
+-- Navnet uten realm brukes til matching mot Discord; realm lagres ved siden av.
+local function delOppNavn(navn)
+  if not navn then return nil, nil end
+  local kort, realm = navn:match("^([^-]+)-(.+)$")
+  if kort then return kort, realm end
+  -- Ingen suffiks betyr hjemrealm — den vi selv staar paa.
+  return navn, (GetNormalizedRealmName and GetNormalizedRealmName())
+    or (GetRealmName and GetRealmName()) or nil
 end
 
 local function visOfflineMedlemmer()
@@ -72,8 +80,11 @@ local function lesRoster()
         dagerOffline = 0
       end
 
+      local kortNavn, realm = delOppNavn(navn)
       table.insert(karakterer, {
-        name        = stripRealm(navn),
+        name        = kortNavn,
+        -- Ingen hardkodet realm noe sted: guilden er cross-realm.
+        realm       = realm,
         rankIndex   = (rankIndex or 0) + 1,  -- 0-basert API -> 1-basert som i Guild Control
         rankName    = rangNavn,
         level       = niva,
