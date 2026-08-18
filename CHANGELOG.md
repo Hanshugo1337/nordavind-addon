@@ -1,5 +1,48 @@
 # NordavindLC Changelog
 
+## 1.9.0 (2026-08-18)
+
+Sesong 2-releasen. Alt siden 1.8.0 (16. juni) — sesong 2-reglene, officer-avstemming, omskrevet loot-deteksjon og roster-import.
+
+### Sesong 2-reglene håndheves nå i addonet
+
+- **Ny sorteringsrekkefølge:** kategori → rank → score → færrest items denne sesongen → seedet terning. `roleTier` er fjernet — den lot en DPS med lav score slå en tank med høy, fordi rollen allerede ligger som +5 i baseScore fra nettsida.
+- **Rank er et hardt skille** — en trial rangeres aldri over en raider. Ukjent rank havner sist, aldri først.
+- **Sorteringsrang skilt fra visningsrang,** så backups kan legges bak trials ved sesongstart uten at addonet viser feil rang.
+- **Uavgjort avgjøres likt som på nordavind.cc.** Terningen er FNV-1a over UTF-8-bytes, samme hash som nettsida, så begge verktøy gir samme svar på samme data. Før dette avgjorde `table.sort` vilkårlig.
+- **Ukesstraffen er 10 poeng,** offspec er fritatt fra ukestelleren, og omfordeling av et award flytter straffen med itemet.
+- **Ukesgrensa spørres av spillet** (`C_DateAndTime.GetSecondsUntilWeeklyReset`) i stedet for å regnes lokalt. Resetten er onsdag 07:00 lokal servertid — den gamle utregningen bommet.
+- **Oppmøtevarselet flyttet fra 80 til 90,** som er kravet i sesong 2.
+
+### Officer-avstemming
+
+- Rådgivende avstemming under councilet: lederen deler ut, men er det stemt over itemet **kreves begrunnelse**.
+- Stemmetall og begrunnelse følger med til `LootDrop.note` og vises i loot-historikken på nordavind.cc.
+- Testbart alene med `/nordlc test` + `/nordlc testvote`.
+
+### Loot-deteksjon og fordeling
+
+- **Distribuert innsamling** — bag-scan etter boss-kill i stedet for å lese loot-vinduet, som ble upålitelig med Group Loot.
+- **Loot Detected-panel** med ikoner, hvem som lootet, live responsteller, nedtellingsmerke og hastesortering.
+- **Roll-off mellom kandidater** via `RandomRoll` med fangst fra system-chatten. 15-sekundersvinduet kan avbrytes.
+- **Kunngjøring i raid warning** ved tildeling, endring og DE/bank/fri.
+- **Egen dropdown** erstatter de ødelagte `MenuUtil`-menyene.
+
+### Roster-import
+
+- **`/nordroster`** fanger hele guild-rosteret med public notes, officer notes, rang, klasse og realm, og sender det via companion til nordavind.cc for godkjenning.
+- Ingen hardkodet realm noe sted — guilden er cross-realm.
+
+### Kompatibilitet
+
+- **Interface oppdatert til 120100, 120005, 120007** (Midnight 12.1.0). 1.8.0 sto på 120001/120005 og ble derfor merket «Out of date», så addonet ikke lastet uten manuell avhuking.
+- **Comms leser restriksjonen fra event-payloaden** i stedet for å polle. Meldinger sendt i `Activating`-vinduet — som treffer encounter-start — forsvant stille før.
+- **`ROLL_CALL_ACK` bærer addon-versjonen,** så offiseren varsles ved council-start om noen kjører en annen versjon.
+
+### Kjent begrensning
+
+- **Sim-poeng mangler fortsatt i addonet.** Nettsida legger inntil 8 poeng for sim-oppgradering; addonet gjør ikke. Rangeringen kan derfor avvike fra nordavind.cc. Blokkert på at sim-tallene for sesong 2 ikke finnes ennå.
+
 ## 1.7.5 (2026-04-29)
 
 ### Bug Fixes
