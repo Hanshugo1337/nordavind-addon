@@ -112,8 +112,12 @@ frame:SetScript("OnEvent", function(self, event, arg1)
       NLC.Deactivate()
       NLC.Utils.Print("Deaktivert (forlot raid).")
     end
-    -- Leader re-broadcasts ACTIVATE when roster changes (new players joining)
-    if NLC.active and IsInRaid() and UnitIsGroupLeader("player") then
+    -- Enhver AKTIV officer kringkaster ACTIVATE naar rosteret endrer seg — ikke
+    -- bare raidlederen. Er offiseren ikke leder, ble dette aldri sendt, og en
+    -- raider som logget inn eller reloadet sto uaktivert. En uaktivert klient
+    -- har ingen events registrert: ingen auto-pass, ingen bag-scan, ingen
+    -- rapport. Det var stille, og det saa ut som om addonet ikke virket.
+    if NLC.active and IsInRaid() and (NLC.isOfficer or UnitIsGroupLeader("player")) then
       NLC.Comms.Send("ACTIVATE", "")
     end
 
@@ -128,6 +132,37 @@ frame:SetScript("OnEvent", function(self, event, arg1)
   end
 end)
 
+
+-- ============================================================
+-- Egen feilfangst
+--
+-- I går var vi avhengige av at brukeren hadde BugGrabber og at noen leste den.
+-- Det er ikke en plan. Blizzard fyrer tre events når et addon gjør noe som ikke
+-- er lov, og de koster ingenting å lytte på: ADDON_ACTION_BLOCKED og
+-- ADDON_ACTION_FORBIDDEN (protected funksjon kalt fra addon-kode — akkurat det
+-- som gjorde trade-vinduet dødt uten en eneste synlig feilmelding), og
+-- LUA_WARNING.
+--
+-- Vi logger kun det som nevner oss, og hver melding én gang. Uten dedupen ville
+-- ett blokkert kall i en OnUpdate spist hele diagnoseloggen.
+-- ============================================================
+local feilRamme = CreateFrame("Frame")
+local sett = {}
+
+local function fangFeil(_, event, ...)
+  local tekst = table.concat({ tostring(event), ... }, " ")
+  if not tekst:find("NordavindLC", 1, true) then return end
+  if sett[tekst] then return end
+  sett[tekst] = true
+  if NLC.Utils and NLC.Utils.Diag then
+    NLC.Utils.Diag("FEIL: " .. tekst:sub(1, 300))
+  end
+end
+
+for _, e in ipairs({ "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN", "LUA_WARNING" }) do
+  pcall(function() feilRamme:RegisterEvent(e) end)
+end
+feilRamme:SetScript("OnEvent", fangFeil)
 
 function NLC.CheckOfficer()
   -- Raid leader always gets officer access
@@ -284,9 +319,113 @@ SlashCmdList["NORDLC"] = function(msg)
     end
     if #items == 0 then
       NLC.Utils.Print("Usage: /nordlc add [shift-click items here]")
+      NLC.Utils.Print("  Eller /nordlc addall for alt tradeable i baggen.")
       return
     end
     NLC.Council.StartMultiSession(items, "Manuelt")
+    return
+
+  elseif cmd == "award" then
+    -- Del ut uten council: /nordlc award <spiller> [shift-klikk items]
+    --
+    -- Councilet krever at raidernes klienter svarer. Gjoer de ikke det, staar
+    -- offiseren med items i baggen og ingen maate aa registrere hvem som fikk
+    -- hva — og da mister nettsida bade loot-historikk og ukesteller. Denne veien
+    -- gaar utenom hele comms-kjeden: du deler ut som du vil, og skriver det inn.
+    if not NLC.isOfficer then
+      NLC.Utils.Print("Only officers can award.")
+      return
+    end
+    local navn = arg:match("^(%S+)")
+    local items = {}
+    for itemLink in arg:gmatch("|c.-|h.-|h|r") do table.insert(items, itemLink) end
+
+    -- Ingen lenker? Da er resten av linja et soek i baggen.
+    --
+    -- Med foerti uutdelte items er shift-klikking av hver enkelt uholdbart.
+    -- Vi leter kun blant tradeable raid-loot (samme liste som /nordlc addall),
+    -- saa et soek kan aldri treffe tilfeldig skrot i baggen.
+    if navn and #items == 0 then
+      local soek = arg:match("^%S+%s+(.-)%s*$")
+      local GYLDIGE_KAT = { upgrade = true, catalyst = true, offspec = true, tmog = true }
+      -- Kategorien staar til slutt og er ikke en del av soeketeksten.
+      if soek then
+        local sisteOrd = soek:match("(%S+)%s*$")
+        if sisteOrd and GYLDIGE_KAT[sisteOrd:lower()] then
+          soek = soek:sub(1, #soek - #sisteOrd):match("^(.-)%s*$")
+        end
+      end
+      if soek and soek ~= "" then
+        local treff = {}
+        for _, it in ipairs(NLC.LootDetection.ScanBagsForPanel()) do
+          local itemNavn = it.itemLink and it.itemLink:match("%[(.-)%]") or ""
+          if itemNavn:lower():find(soek:lower(), 1, true) then
+            table.insert(treff, it.itemLink)
+          end
+        end
+        if #treff == 0 then
+          NLC.Utils.Print("Fant ingen tradeable items som matcher «" .. soek .. "».")
+          return
+        end
+        if #treff > 1 then
+          NLC.Utils.Print("|cffff8800" .. #treff .. " items matcher «" .. soek .. "»:|r")
+          for _, l in ipairs(treff) do NLC.Utils.Print("  " .. l) end
+          NLC.Utils.Print("Skriv mer av navnet, eller shift-klikk itemet.")
+          return
+        end
+        items = treff
+      end
+    end
+
+    if not navn or #items == 0 then
+      NLC.Utils.Print("Bruk: /nordlc award <spiller> <del av item-navnet>")
+      NLC.Utils.Print("  eller /nordlc award <spiller> [shift-klikk items]")
+      NLC.Utils.Print("  Legg paa offspec/tmog/catalyst til slutt ved behov.")
+      return
+    end
+    -- Kategori kan henges paa til slutt: upgrade/catalyst/offspec/tmog.
+    local GYLDIGE = { upgrade = true, catalyst = true, offspec = true, tmog = true }
+    local siste = arg:match("(%S+)%s*$")
+    local kategori = (siste and GYLDIGE[siste:lower()]) and siste:lower() or "upgrade"
+
+    local boss = (NLC.LootDetection.GetCurrentBoss and NLC.LootDetection.GetCurrentBoss())
+                 or "Manuelt"
+    for _, link in ipairs(items) do
+      local itemId = C_Item.GetItemInfoInstant(link)
+      NLC.RecordAward(link, navn, UnitName("player"), boss, kategori, itemId, true, nil)
+      NLC.Utils.Print(link .. " -> " .. navn .. " (" .. kategori .. ")")
+      if NLC.Council.AnnounceRW then
+        NLC.Council.AnnounceRW(link .. " tildelt " .. navn)
+      end
+    end
+    NLC.Utils.Diag("/nordlc award | " .. #items .. " items -> " .. navn)
+    NLC.Utils.Print("|cff33cc33" .. #items .. " registrert.|r Eksporteres til nordavind.cc ved neste synk.")
+    return
+
+  elseif cmd == "addall" then
+    -- Alt tradeable i baggen, uten aa shift-klikke hvert eneste item.
+    if not NLC.active then
+      NLC.Utils.Print("Addon is not active. Use /nordlc activate first.")
+      return
+    end
+    if not NLC.isOfficer then
+      NLC.Utils.Print("Only officers can start council.")
+      return
+    end
+    local funnet = NLC.LootDetection.ScanBagsForPanel()
+    NLC.Utils.Diag("/nordlc addall | " .. #funnet .. " items funnet i baggen")
+    if #funnet == 0 then
+      NLC.Utils.Print("Fant ingen tradeable items i baggen.")
+      NLC.Utils.Print("  Kun epic+ med handelstid igjen telles med.")
+      NLC.Utils.Print("  /nordlc add [shift-klikk items] legger inn manuelt.")
+      return
+    end
+    -- Panelet, ikke councilet. Du skal se over lista og kunne slette items
+    -- foer noe som helst gaar ut til raidet.
+    NLC.LootDetection._setDetected(funnet)
+    NLC.UI.ShowLootDetected(funnet)
+    NLC.Utils.Print(#funnet .. " item" .. (#funnet > 1 and "s" or "") ..
+                    " lagt i panelet. Fjern med X, og trykk Start Council.")
     return
 
   elseif cmd == "activate" then
@@ -386,6 +525,29 @@ SlashCmdList["NORDLC"] = function(msg)
   elseif cmd == "debug" then
     NLC.LootDetection.ToggleDebug()
 
+  elseif cmd == "diag" then
+    -- Diagnoseloggen rett i chatten. SavedVariables skrives kun ved /reload,
+    -- og midt i et raid er det en dyr måte å stille et spørsmål på.
+    local logg = (NLC.db and NLC.db.diagLog) or {}
+    if arg:lower() == "clear" then
+      if NLC.db then NLC.db.diagLog = {} end
+      NLC.Utils.Print("Diagnoselogg tømt.")
+      return
+    end
+    NLC.Utils.Print("--- Diagnose ---")
+    NLC.Utils.Print(string.format("Aktiv: %s | Officer: %s | I raid: %s | Leder: %s",
+      tostring(NLC.active), tostring(NLC.isOfficer),
+      tostring(IsInRaid()), tostring(UnitIsGroupLeader("player"))))
+    local n = tonumber(arg) or 20
+    local start = math.max(1, #logg - n + 1)
+    if #logg == 0 then
+      NLC.Utils.Print("  (loggen er tom — ingen boss eller /nordlc addall siden innlasting)")
+    end
+    for i = start, #logg do
+      NLC.Utils.Print("  " .. logg[i])
+    end
+    NLC.Utils.Print(string.format("--- %d linjer totalt (/nordlc diag 50 for flere) ---", #logg))
+
   elseif cmd == "timer" then
     local secs = tonumber(arg)
     if secs and secs >= 30 then
@@ -435,9 +597,12 @@ SlashCmdList["NORDLC"] = function(msg)
     end
 
     local fakeItems = {
-      { itemLink = "|cffa335ee|Hitem:111111::::::::80:::::|h[Void-Touched Chestplate]|h|r", itemId = 111111, ilvl = 639, equipLoc = "INVTYPE_CHEST", boss = "Test Boss" },
-      { itemLink = "|cffa335ee|Hitem:222222::::::::80:::::|h[Dreamrift Shoulders]|h|r", itemId = 222222, ilvl = 639, equipLoc = "INVTYPE_SHOULDER", boss = "Test Boss" },
-      { itemLink = "|cffa335ee|Hitem:333333::::::::80:::::|h[Quel'Danas Legguards]|h|r", itemId = 333333, ilvl = 636, equipLoc = "INVTYPE_LEGS", boss = "Test Boss" },
+      { itemLink = "|cffa335ee|Hitem:270162::::::::90:::::|h[Soulcoiler Ritual Vessel]|h|r", itemId = 270162, ilvl = 671, equipLoc = "INVTYPE_CHEST", boss = "Test Boss" },
+      { itemLink = "|cffa335ee|Hitem:268235::::::::90:::::|h[Vestment of the Awakening]|h|r", itemId = 268235, ilvl = 671, equipLoc = "INVTYPE_LEGS", boss = "Test Boss" },
+      -- Token-grenen: equipLoc = "" er den ENESTE veien inn i
+      -- GetTierTokenArmorType, og det var den som drepte alle popupene 19.08.
+      -- Uten en slik rad kan ingen testkommando naa dit.
+      { itemLink = "|cffa335ee|Hitem:268208::::::::90:::::|h[Strongblood's Ceremonial Cleaver]|h|r", itemId = 268208, ilvl = 678, equipLoc = "", armorType = "Plate", boss = "Test Boss" },
     }
 
     local fakeSessions = {}
@@ -502,8 +667,9 @@ SlashCmdList["NORDLC"] = function(msg)
 
   elseif cmd == "testpopup" then
     local fakeItems = {
-      { sessionIdx = 1, itemLink = "|cffa335ee|Hitem:111111::::::::80:::::|h[Void-Touched Chestplate]|h|r", itemId = 111111, ilvl = 639, equipLoc = "INVTYPE_CHEST", boss = "Test Boss" },
-      { sessionIdx = 2, itemLink = "|cffa335ee|Hitem:222222::::::::80:::::|h[Dreamrift Shoulders]|h|r", itemId = 222222, ilvl = 639, equipLoc = "INVTYPE_SHOULDER", boss = "Test Boss" },
+      { sessionIdx = 1, itemLink = "|cffa335ee|Hitem:270162::::::::90:::::|h[Soulcoiler Ritual Vessel]|h|r", itemId = 270162, ilvl = 671, equipLoc = "INVTYPE_CHEST", boss = "Test Boss" },
+      -- Token-raden maa vaere med her ogsaa: popupen er der den krasjet.
+      { sessionIdx = 2, itemLink = "|cffa335ee|Hitem:268208::::::::90:::::|h[Strongblood's Ceremonial Cleaver]|h|r", itemId = 268208, ilvl = 678, equipLoc = "", armorType = "Plate", boss = "Test Boss" },
     }
     NLC.UI.ShowMultiItemPopup(fakeItems, 30)
     NLC.Utils.Print("Test multi-item popup shown.")
@@ -513,10 +679,10 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.active = true
     -- Simulate boss loot drop with multiple items
     local fakeItems = {
-      { itemLink = "|cffa335ee|Hitem:111111::::::::80:::::|h[Void-Touched Chestplate]|h|r", itemId = 111111, ilvl = 639, equipLoc = "INVTYPE_CHEST", boss = "Test Boss", looter = "Player1" },
-      { itemLink = "|cffa335ee|Hitem:222222::::::::80:::::|h[Dreamrift Shoulders]|h|r", itemId = 222222, ilvl = 639, equipLoc = "INVTYPE_SHOULDER", boss = "Test Boss", looter = "Player2" },
-      { itemLink = "|cffa335ee|Hitem:333333::::::::80:::::|h[Quel'Danas Legguards]|h|r", itemId = 333333, ilvl = 636, equipLoc = "INVTYPE_LEGS", boss = "Test Boss", looter = "Player3" },
-      { itemLink = "|cffa335ee|Hitem:444444::::::::80:::::|h[Voidspire Trinket]|h|r", itemId = 444444, ilvl = 639, equipLoc = "INVTYPE_TRINKET", boss = "Test Boss", looter = "Player1" },
+      { itemLink = "|cffa335ee|Hitem:270162::::::::90:::::|h[Soulcoiler Ritual Vessel]|h|r", itemId = 270162, ilvl = 671, equipLoc = "INVTYPE_CHEST", boss = "Test Boss", looter = "Player1" },
+      { itemLink = "|cffa335ee|Hitem:268235::::::::90:::::|h[Vestment of the Awakening]|h|r", itemId = 268235, ilvl = 671, equipLoc = "INVTYPE_LEGS", boss = "Test Boss", looter = "Player2" },
+      { itemLink = "|cffa335ee|Hitem:270930::::::::90:::::|h[Tomb-Creeper's Claw]|h|r", itemId = 270930, ilvl = 671, equipLoc = "INVTYPE_WEAPON", boss = "Test Boss", looter = "Player3" },
+      { itemLink = "|cffa335ee|Hitem:268208::::::::90:::::|h[Strongblood's Ceremonial Cleaver]|h|r", itemId = 268208, ilvl = 678, equipLoc = "", armorType = "Plate", boss = "Test Boss", looter = "Player1" },
     }
     NLC.LootDetection._setDetected(fakeItems)  -- seed the panel's backing list so remove/Start Council work
     NLC.UI.ShowLootDetected(fakeItems)
@@ -544,10 +710,13 @@ SlashCmdList["NORDLC"] = function(msg)
     NLC.Utils.Print("Commands:")
     NLC.Utils.Print("  /nordlc activate — Aktiver addon")
     NLC.Utils.Print("  /nordlc deactivate — Deaktiver addon")
+    NLC.Utils.Print("  /nordlc award <spiller> [item] — Registrer utdeling UTEN council")
+    NLC.Utils.Print("  /nordlc addall — Legg ALT tradeable fra baggen i panelet")
     NLC.Utils.Print("  /nordlc add [item] — Start council (shift-klikk items)")
     NLC.Utils.Print("  /nordlc council — Gjenåpne aktivt loot council vindu")
     NLC.Utils.Print("  /nordlc timer <sek> — Sett respons-timer (min 30, default 90)")
     NLC.Utils.Print("  /nordlc debug — Toggle loot detection debug-logging")
+    NLC.Utils.Print("  /nordlc diag [antall] — Vis diagnoselogg (diag clear tømmer)")
     NLC.Utils.Print("  /nordlc roster — Fang guild-rosteret med noter (krever /reload etterpå)")
   NLC.Utils.Print("  /nordlc history — Vis award historikk")
   NLC.Utils.Print("  /nordlc trade — Vis items som venter på trade")

@@ -26,6 +26,20 @@ NLC.Theme.WHITE      = "|cffffffff"
 NLC.Theme.RED        = "|cffff3333"
 NLC.Theme.GREEN      = "|cff33cc33"
 NLC.Theme.ORANGE     = "|cffff8800"
+NLC.Theme.BLUE       = "|cff00ccff"
+
+-- Farger om en itemlenke uten aa oedelegge den.
+--
+-- Lenken baerer sin egen farge, og den vinner over alt vi pakker rundt. Spillet
+-- gir oss enten |cffRRGGBB eller det nyere |cnIQ4:, saa vi kan ikke bytte ut ett
+-- fast moenster — vi kutter alt foran |H og setter vaar egen kode der. Halen
+-- (|h[Navn]|h|r) staar urort, saa lenken virker som foer.
+function NLC.Theme.Recolor(link, color)
+  if not link then return nil end
+  local rest = link:match("(|H.*)$")
+  if not rest then return link end
+  return color .. rest
+end
 
 -- Apply dark themed backdrop to a frame
 local BACKDROP_INFO = {

@@ -100,11 +100,28 @@ function NLC.Utils.GetTierCount()
   return count
 end
 
+-- Tooltip-linjene for en itemlenke, eller nil.
+--
+-- Funksjonen het `C_TooltipInfo.GetItemByHyperlink` her. Det navnet finnes ikke
+-- — det heter `GetHyperlink`, og NordavindLC var det eneste addonet i klienten
+-- som brukte det gale. Kallet ga ikke feil svar, det var nil, så det KASTET, og
+-- fra ScanBags rev det med seg hele bag-gjennomgangen på det første itemet som
+-- ellers ville blitt fanget. Derfor pcall også: en tooltip som ikke lar seg lese
+-- skal koste oss det ene itemet, aldri hele runden.
+local function itemTooltipLines(itemLink)
+  if not itemLink or not C_TooltipInfo then return nil end
+  local get = C_TooltipInfo.GetHyperlink or C_TooltipInfo.GetItemByHyperlink
+  if not get then return nil end
+  local ok, data = pcall(get, itemLink)
+  if not ok or not data then return nil end
+  return data.lines
+end
+
 function NLC.Utils.IsWarbound(itemLink)
   if not itemLink then return false end
-  local tooltipData = C_TooltipInfo.GetItemByHyperlink(itemLink)
-  if not tooltipData or not tooltipData.lines then return false end
-  for _, line in ipairs(tooltipData.lines) do
+  local lines = itemTooltipLines(itemLink)
+  if not lines then return false end
+  for _, line in ipairs(lines) do
     local text = line.leftText or ""
     if text:find("Warbound") or text:find("Account Bound") then
       return true
@@ -162,6 +179,49 @@ NLC.Utils.CLASS_ARMOR = {
 
 local TIER_TOKEN_ARMOR_TYPES = { Cloth = true, Leather = true, Mail = true, Plate = true }
 
+-- «Lokalisert klassenavn» -> klassetoken, bygget én gang ved første behov.
+-- Blizzard fyller begge tabellene med klassetoken som nøkkel, så vi snur dem.
+local localizedClassToToken
+local function classNameLookup()
+  if localizedClassToToken then return localizedClassToToken end
+  localizedClassToToken = {}
+  for _, kilde in ipairs({ _G.LOCALIZED_CLASS_NAMES_MALE, _G.LOCALIZED_CLASS_NAMES_FEMALE }) do
+    if type(kilde) == "table" then
+      for token, navn in pairs(kilde) do
+        if type(navn) == "string" then localizedClassToToken[navn] = token end
+      end
+    end
+  end
+  return localizedClassToToken
+end
+
+-- Rustningstypen til et tier-token, lest ut av «Classes:»-linja i tooltipen.
+--
+-- Et token har itemSubType «Junk» og ingen egen linje som bare sier «Plate», så
+-- de to sjekkene under fanger det ikke. Men tooltipen lister alltid klassene
+-- tokenet gjelder, og alle klassene på ett token deler rustningstype — så den
+-- første klassen vi kjenner igjen avgjør. ITEM_CLASSES_ALLOWED er Blizzards egen
+-- formatstreng, samme grep som handelstida i IsTradeableBagItem, så dette virker
+-- uansett klientspråk.
+local function tokenArmorFromClasses(lines)
+  if not lines then return nil end
+  local prefiks = (_G.ITEM_CLASSES_ALLOWED or "Classes: %s"):gsub("%%s.*$", "")
+  if prefiks == "" then return nil end
+  local oppslag = classNameLookup()
+  for _, line in ipairs(lines) do
+    local text = line.leftText or ""
+    if text:find(prefiks, 1, true) == 1 then
+      for raa in text:sub(#prefiks + 1):gmatch("[^,]+") do
+        local navn = raa:match("^%s*(.-)%s*$")
+        local token = oppslag[navn]
+        local rustning = token and NLC.Utils.CLASS_ARMOR[token]
+        if rustning then return rustning end
+      end
+    end
+  end
+  return nil
+end
+
 -- Returns "Cloth", "Leather", "Mail", or "Plate" if the item is an armor-type tier token.
 -- A tier token is epic+, non-equippable, and tied to a specific armor class.
 function NLC.Utils.GetTierTokenArmorType(itemLink)
@@ -171,20 +231,61 @@ function NLC.Utils.GetTierTokenArmorType(itemLink)
   if equipLoc and equipLoc ~= "" and equipLoc ~= "INVTYPE_NON_EQUIP_IGNORE" then return nil end
   if itemSubType and TIER_TOKEN_ARMOR_TYPES[itemSubType] then return itemSubType end
   -- Tooltip fallback: scan for a line that is exactly the armor type name
-  local tooltipData = C_TooltipInfo and C_TooltipInfo.GetItemByHyperlink(itemLink)
-  if tooltipData and tooltipData.lines then
-    for _, line in ipairs(tooltipData.lines) do
+  local lines = itemTooltipLines(itemLink)
+  if lines then
+    for _, line in ipairs(lines) do
       local t = line.leftText or ""
       if TIER_TOKEN_ARMOR_TYPES[t] then return t end
     end
   end
-  return nil
+  -- Siste utvei, og den som faktisk treffer på ekte tier-tokens: klasselista.
+  return tokenArmorFromClasses(lines)
 end
 
 local ARMOR_SUBCLASS = { [1] = "Cloth", [2] = "Leather", [3] = "Mail", [4] = "Plate" }
 local TIER_SLOTS = { INVTYPE_HEAD = true, INVTYPE_SHOULDER = true, INVTYPE_CHEST = true, INVTYPE_ROBE = true, INVTYPE_HAND = true, INVTYPE_LEGS = true }
 local JEWELRY_SLOTS = { INVTYPE_FINGER = true, INVTYPE_TRINKET = true, INVTYPE_NECK = true, INVTYPE_CLOAK = true }
 local WEAPON_SLOTS = { INVTYPE_WEAPON = true, INVTYPE_2HWEAPON = true, INVTYPE_WEAPONMAINHAND = true, INVTYPE_WEAPONOFFHAND = true, INVTYPE_HOLDABLE = true, INVTYPE_SHIELD = true, INVTYPE_RANGED = true }
+
+-- Er slotten en tier-slot? Eksponert fordi BÅDE knappefilteret her og
+-- rangeringen i Council må svare likt. De gjorde ikke det: front-end fritok tier
+-- fra wishlist-filteret, rangeringen gjorde ikke, og da kunne en raider trykke
+-- «Upgrade» på en tier-del og likevel bli kastet ut av lista uten et ord.
+function NLC.Utils.IsTierSlot(equipLoc)
+  return equipLoc ~= nil and TIER_SLOTS[equipLoc] == true
+end
+
+-- Klassetoken for en spiller i raidet, eller nil hvis vi ikke vet.
+--
+-- UnitClass tar en unit-id. Et spillernavn duger som unit-id for folk i gruppa
+-- di — men i et cross-realm raid MÅ realmen være med. Offiseren strippet den
+-- («Moggin-TarrenMill» → «Moggin»), fikk nil, og falt tilbake på «WARRIOR» for
+-- alle. På et tier-token betyr det at rustningsfilteret sammenlignet Plate mot
+-- alle: var tokenet Cloth, Leather eller Mail ble HVER ENESTE kandidat kastet ut
+-- og rangeringsvinduet sto tomt.
+--
+-- Derfor: prøv fullt navn først, så kortformen, og til slutt raid-rosteret, som
+-- kjenner klassen uansett realm. Returnerer nil framfor å gjette — den som
+-- kaller må skille «feil klasse» fra «vet ikke».
+function NLC.Utils.ClassForPlayer(sender)
+  if not sender or sender == "" then return nil end
+  local kort = sender:match("^([^-]+)") or sender
+
+  for _, id in ipairs({ sender, kort }) do
+    local ok, _, klasse = pcall(UnitClass, id)
+    if ok and klasse then return klasse end
+  end
+
+  for i = 1, (GetNumGroupMembers and GetNumGroupMembers() or 0) do
+    local navn, _, _, _, _, fil = GetRaidRosterInfo(i)
+    if navn then
+      local navnKort = navn:match("^([^-]+)") or navn
+      if navn == sender or navnKort == kort then return fil end
+    end
+  end
+
+  return nil
+end
 
 function NLC.Utils.GetAvailableCategories(itemLink, equipLoc, itemId)
   -- Tmog is available on everything by default.
@@ -301,4 +402,19 @@ end
 
 function NLC.Utils.Print(msg)
   print("|cff00ccff[NordavindLC]|r " .. msg)
+end
+
+-- Diagnoselogg som overlever /reload.
+--
+-- Chatten er borte i det øyeblikket noe går galt, og /nordlc debug spammer
+-- skjermen uten å etterlate seg noe. Dette skriver de samme opplysningene til
+-- SavedVariables i stedet, så hele innsamlingsrunden kan leses etterpå. Ringen
+-- holder de siste 150 linjene; eldre faller ut av seg selv.
+local DIAG_MAX = 150
+function NLC.Utils.Diag(msg)
+  if not NLC.db then return end
+  NLC.db.diagLog = NLC.db.diagLog or {}
+  local logg = NLC.db.diagLog
+  table.insert(logg, date("%H:%M:%S") .. " " .. tostring(msg))
+  while #logg > DIAG_MAX do table.remove(logg, 1) end
 end

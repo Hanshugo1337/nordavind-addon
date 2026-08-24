@@ -303,9 +303,21 @@ function NLC.UI.ShowRanking(session, candidates)
         table.insert(items, { divider = true })
         table.insert(items, { text = "Hvisk " .. c.name, func = function() NLC.Council.WhisperCandidate(c.name) end })
         table.insert(items, { text = "Kopier navn", func = function()
-          local eb = ChatEdit_ChooseBoxForSend()
-          ChatEdit_ActivateChat(eb)
-          eb:SetText(c.name)
+          -- INGEN andre addons i klienten bruker ChatEdit_ChooseBoxForSend
+          -- (tests/apicheck.py). Da er den enten sjelden eller borte — og
+          -- kastet den her, tok den med seg menyen midt i en utdeling.
+          if type(ChatEdit_ChooseBoxForSend) ~= "function"
+             or type(ChatEdit_ActivateChat) ~= "function" then
+            NLC.Utils.Print("Navn: " .. c.name)
+            return
+          end
+          local ok, eb = pcall(ChatEdit_ChooseBoxForSend)
+          if not ok or not eb then
+            NLC.Utils.Print("Navn: " .. c.name)
+            return
+          end
+          pcall(ChatEdit_ActivateChat, eb)
+          pcall(eb.SetText, eb, c.name)
         end })
         T.ShowMenu(self, items)
       end)

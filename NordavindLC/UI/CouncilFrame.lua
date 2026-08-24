@@ -198,7 +198,42 @@ local function createItemRow(parent, index, item)
   return row
 end
 
+-- Sant naar spillet kan svare paa alt vi trenger om hvert item.
+--
+-- C_Item.GetItemInfo returnerer nil for et item klienten ikke har i cachen enda.
+-- Bygger vi radene da, er equipLoc nil — og GetAvailableCategories tolker det som
+-- et tier-token. Paa 1.9.0 kastet den grenen og tok hele popupen med seg; selv
+-- med den feilen rettet ville raideren fatt FEIL knapper, uten et ord om det.
+local function itemsAreCached(sessions)
+  for _, s in ipairs(sessions) do
+    if s.itemLink and not C_Item.GetItemInfo(s.itemLink) then return false end
+  end
+  return true
+end
+
+-- Hvor lenge vi venter foer vi bygger uansett. Et item som aldri caches skal gi
+-- en ufullstendig popup, ikke ingen popup.
+local CACHE_WAIT_SECONDS = 5
+local cacheWaitStarted = nil
+
+-- Eksponert for tests/popupcache_harness.lua. Samme understrek-konvensjon som
+-- LootDetection._leaderRollType; ingenting i addonet kaller den herfra.
+NLC.UI._itemsAreCached = itemsAreCached
+
 function NLC.UI.ShowMultiItemPopup(sessions, timer)
+  if not itemsAreCached(sessions) then
+    cacheWaitStarted = cacheWaitStarted or GetTime()
+    if GetTime() - cacheWaitStarted < CACHE_WAIT_SECONDS then
+      -- Neste frame. Spillet fyller cachen i bakgrunnen.
+      C_Timer.After(0, function() NLC.UI.ShowMultiItemPopup(sessions, timer) end)
+      return
+    end
+    if NLC.Utils.Diag then
+      NLC.Utils.Diag("Item-cachen ble aldri komplett — bygger popupen likevel")
+    end
+  end
+  cacheWaitStarted = nil
+
   itemRows = {}
 
   if multiFrame then multiFrame:Hide() end
@@ -251,9 +286,35 @@ function NLC.UI.ShowMultiItemPopup(sessions, timer)
   multiFrame.scrollFrame:SetPoint("BOTTOMRIGHT", -32, 56)
   multiFrame.scrollChild:SetSize(ITEM_ROW_WIDTH, contentHeight)
 
+  -- Hver rad bygges for seg, med vakt rundt.
+  --
+  -- 19.08 kastet createItemRow paa det foerste tier-tokenet, og siden loekka laa
+  -- naken, doede HELE popupen der. Raiderne saa de radene som tilfeldigvis var
+  -- bygget foer tokenet — seks av tolv — eller ingenting. Ingen feilmelding de
+  -- kunne handle paa; vinduet bare uteble.
+  --
+  -- Aarsaken den gangen er rettet, men prinsippet staar: et item vi ikke klarer
+  -- aa tegne skal koste DET itemet, aldri raidets mulighet til aa svare paa
+  -- resten. Radene som lyktes vises, Send-knappen virker, og du faar vite hvilket
+  -- item som sviktet i stedet for aa gjette.
+  local feilet = 0
   for i, session in ipairs(sessions) do
-    local row = createItemRow(multiFrame.scrollChild, i, session)
-    row:Show()
+    local ok, row = pcall(createItemRow, multiFrame.scrollChild, i, session)
+    if ok and row then
+      row:Show()
+    else
+      feilet = feilet + 1
+      local hvorfor = tostring(row)
+      if NLC.Utils.Diag then
+        NLC.Utils.Diag("Kunne ikke tegne rad " .. i .. " (" ..
+                       tostring(session.itemLink) .. "): " .. hvorfor)
+      end
+      NLC.Utils.Print("|cffff8800Klarte ikke vise|r " .. tostring(session.itemLink) ..
+                      " |cffff8800— si fra til offiseren.|r")
+    end
+  end
+  if feilet > 0 then
+    NLC.Utils.Print("|cffff8800" .. feilet .. " item(s) kunne ikke vises. Resten kan du svare paa som vanlig.|r")
   end
 
   if not multiFrame.sendBtn then
@@ -319,6 +380,9 @@ end
 -- ============================================================
 local lootPanel = nil
 
+-- Radbredde er smalere enn panelet: scrollbaren tar plassen til hoeyre.
+local ROW_W, ROW_H, MAX_ROWS = 440, 44, 8
+
 local function refreshLootPanel(items)
   if not lootPanel then return end
 
@@ -331,8 +395,10 @@ local function refreshLootPanel(items)
   end
 
   local count = #items
-  local ROW_H = 44
-  lootPanel:SetHeight(110 + count * ROW_H)
+  local synlige = math.max(1, math.min(count, MAX_ROWS))
+  lootPanel:SetHeight(118 + synlige * ROW_H)
+  lootPanel.content:SetHeight(math.max(1, count) * ROW_H)
+  lootPanel.scroll:SetVerticalScroll(0)
 
   if count == 0 then
     local empty = lootPanel.content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -348,16 +414,19 @@ local function refreshLootPanel(items)
   lootPanel.startBtn:Enable()
   lootPanel.startBtn:SetText(T.GREEN .. "Start Council (" .. count .. ")|r")
 
+  -- Samme vakt som i interesse-popupen: ett item som ikke lar seg tegne skal
+  -- koste den raden, ikke hele panelet — og da med den er du midt i en utdeling.
   for i, item in ipairs(items) do
+    local raadOk = pcall(function()
     -- Alternating row bg
     local rowBg = lootPanel.content:CreateTexture(nil, "BACKGROUND")
     rowBg:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
-    rowBg:SetSize(460, ROW_H)
+    rowBg:SetSize(ROW_W, ROW_H)
     rowBg:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.04 or 0)
     rowBg:Show()
 
     local row = CreateFrame("Frame", nil, lootPanel.content)
-    row:SetSize(460, ROW_H)
+    row:SetSize(ROW_W, ROW_H)
     row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
     row:Show()
 
@@ -369,9 +438,12 @@ local function refreshLootPanel(items)
     -- Item text (shifted right of the icon)
     local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     text:SetPoint("LEFT", 46, 6)
-    text:SetWidth(330)
+    text:SetWidth(ROW_W - 190)
     text:SetJustifyH("LEFT")
-    local itemLabel = (item.itemLink or "?") .. "  " .. T.MUTED .. "(ilvl " .. (item.ilvl or 0) .. ")|r"
+    -- Blå skrift på det som er fanget opp automatisk, så raden skiller seg fra
+    -- kvalitetsfargen items ellers har i spillet.
+    local itemLabel = (T.Recolor(item.itemLink, T.BLUE) or "?")
+      .. "  " .. T.MUTED .. "(ilvl " .. (item.ilvl or 0) .. ")|r"
     if item.armorType then
       itemLabel = itemLabel .. "  " .. T.GOLD_DIM .. "[" .. item.armorType .. "]|r"
     end
@@ -384,6 +456,60 @@ local function refreshLootPanel(items)
       looterText:SetText(T.MUTED .. "looted av " .. item.looter .. "|r")
     end
 
+    -- «Del ut» → liste over raidet → klikk navn. To klikk, ingen tasting.
+    --
+    -- Gaar helt utenom councilet og comms: ingen popup hos raiderne som kan
+    -- krasje, ingen svar aa vente paa. Registreringen foelger likevel med —
+    -- historikk, eksport til nordavind.cc og pending trade.
+    local delUt = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
+    delUt:SetSize(92, 22)
+    delUt:SetPoint("RIGHT", -36, 0)
+    delUt:SetText(T.GOLD_LIGHT .. "Del ut|r ▾")
+
+    local function tildel(navn, kategori, eksporterbar)
+      local itemId = item.itemId or C_Item.GetItemInfoInstant(item.itemLink)
+      NLC.RecordAward(item.itemLink, navn, UnitName("player"),
+                      item.boss or "Manuelt", kategori or "upgrade", itemId,
+                      eksporterbar, nil)
+      NLC.Utils.Print((item.itemLink or "?") .. " |cff33cc33->|r " .. navn)
+      if NLC.Council.AnnounceRW then
+        NLC.Council.AnnounceRW((item.itemLink or "?") .. " tildelt " .. navn)
+      end
+      NLC.LootDetection.RemoveItem(i)
+      refreshLootPanel(NLC.LootDetection.GetDroppedItems())
+    end
+
+    delUt:SetScript("OnClick", function(self)
+      local valg = {}
+      -- Raidet, alfabetisk og klassefarget.
+      local rad = {}
+      for r = 1, (GetNumGroupMembers and GetNumGroupMembers() or 0) do
+        local navn, _, _, _, _, klasse = GetRaidRosterInfo(r)
+        if navn then
+          table.insert(rad, { navn = navn:match("^([^-]+)") or navn, klasse = klasse })
+        end
+      end
+      table.sort(rad, function(a, b) return a.navn < b.navn end)
+      for _, m in ipairs(rad) do
+        local f = NLC.Utils.CLASS_COLORS[m.klasse]
+        local farge = f and string.format("|cff%02x%02x%02x", f.r * 255, f.g * 255, f.b * 255)
+        table.insert(valg, {
+          text = m.navn, color = farge,
+          func = function() tildel(m.navn, "upgrade", true) end,
+        })
+      end
+      if #valg == 0 then
+        table.insert(valg, { title = true, text = "Ikke i raid" })
+      end
+      -- Maal som ikke teller som loot.
+      table.insert(valg, { divider = true })
+      table.insert(valg, { text = "Guildbank", color = T.MUTED,
+        func = function() tildel("Guildbank", "bank", false) end })
+      table.insert(valg, { text = "Disenchant", color = T.MUTED,
+        func = function() tildel("Disenchant", "disenchant", false) end })
+      T.ShowMenu(self, valg)
+    end)
+
     -- Remove button (X)
     local removeBtn = CreateFrame("Button", nil, row, "UIPanelCloseButtonNoScripts")
     removeBtn:SetSize(24, 24)
@@ -394,6 +520,13 @@ local function refreshLootPanel(items)
       refreshLootPanel(remaining)
       NLC.Utils.Print("Removed: " .. (item.itemLink or "?"))
     end)
+    end)
+    if not raadOk then
+      NLC.Utils.Print("|cffff8800Klarte ikke tegne raden for|r " .. tostring(item.itemLink))
+      if NLC.Utils.Diag then
+        NLC.Utils.Diag("Loot-panel: rad " .. i .. " feilet (" .. tostring(item.itemLink) .. ")")
+      end
+    end
   end
 end
 
@@ -421,15 +554,24 @@ function NLC.UI.ShowLootDetected(items)
     lootPanel.countText = lootPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     lootPanel.countText:SetPoint("TOP", 0, -34)
 
-    -- Content area for item rows
-    lootPanel.content = CreateFrame("Frame", nil, lootPanel)
-    lootPanel.content:SetPoint("TOPLEFT", 15, -52)
-    lootPanel.content:SetPoint("RIGHT", -15, 0)
-    lootPanel.content:SetHeight(200)
+    -- Content area for item rows, i en scroll-ramme.
+    --
+    -- Uten den vokste panelet fritt med antall items: /nordlc addall drar inn alt
+    -- tradeable du har, og med femten items ble ruta høyere enn skjermen — uten
+    -- noen måte å komme til radene nederst. Nå står høyden fast på MAX_ROWS rader
+    -- og resten scrolles.
+    lootPanel.scroll = CreateFrame("ScrollFrame", "NordavindLCLootScroll", lootPanel,
+                                   "UIPanelScrollFrameTemplate")
+    lootPanel.scroll:SetPoint("TOPLEFT", 15, -52)
+    lootPanel.scroll:SetPoint("BOTTOMRIGHT", -34, 66)
+
+    lootPanel.content = CreateFrame("Frame", nil, lootPanel.scroll)
+    lootPanel.content:SetSize(ROW_W, 100)
+    lootPanel.scroll:SetScrollChild(lootPanel.content)
 
     -- Start Council button (bottom, prominent)
     lootPanel.startBtn = CreateFrame("Button", nil, lootPanel, "UIPanelButtonTemplate")
-    lootPanel.startBtn:SetSize(460, 42)
+    lootPanel.startBtn:SetSize(460, 38)
     lootPanel.startBtn:SetPoint("BOTTOM", 0, 16)
     lootPanel.startBtn:SetNormalFontObject("GameFontHighlightLarge")
     lootPanel.startBtn:SetScript("OnClick", function()

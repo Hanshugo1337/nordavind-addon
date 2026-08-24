@@ -131,6 +131,21 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
     NLC.Utils.Print("Activated by council session.")
   end
 
+  -- ROLL_CALL og VERSION_CHECK aktiverer ogsaa.
+  --
+  -- Begge laa UNDER porten under her, saa en som hadde addonet installert men
+  -- ikke aktivert svarte aldri — hun var usynlig baade for /nordlc version og
+  -- for opptellingen ved council-start. Verre: en uaktivert klient har ingen
+  -- events registrert i det hele tatt, saa hun auto-passet ikke og rapporterte
+  -- ingen loot heller. Stille, og umulig aa se utenfra.
+  --
+  -- Begge meldingene er bevis paa at en offiser holder paa akkurat naa, saa de
+  -- er like gode aktiveringsgrunner som SESSION_START.
+  if not NLC.active and (msgType == "ROLL_CALL" or msgType == "VERSION_CHECK") then
+    NLC.Activate()
+    NLC.Utils.Print("Aktivert av council-oppkall.")
+  end
+
   if not NLC.active then return end
 
   if msgType == "SESSION_START" then

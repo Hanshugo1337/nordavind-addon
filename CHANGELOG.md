@@ -1,5 +1,178 @@
 # NordavindLC Changelog
 
+## 1.9.1 (2026-08-19)
+
+### Diagnose (lagt til 22.08, foer release)
+
+To linjer i diagloggen kunne ikke svare paa spoersmaal de burde kunnet svare paa.
+
+- **«Innsamling stengt | 0 items» sier naa hvorfor.** Den samme linja betydde foer
+  enten at ingenting droppet eller at filteret kastet alt — to helt ulike
+  tilstander, umulige aa skille. Avviste items telles naa per grunn, og linja
+  ender paa `| avvist: 14 uten handelstid`. Merk at filteret krever det aktive
+  2-timers handelsvinduet, ikke bare epic-kvalitet: i gammelt innhold avvises alt,
+  og det er riktig oppfoersel.
+- **`ENCOUNTER_END` logges ogsaa naar addonet er av.** Registreringen laa i
+  `Register()`, som kun kalles fra `Activate()`. Grenen «addon er IKKE aktiv» var
+  derfor doed kode, og en hel raidkveld med addonet lastet kunne gi null linjer i
+  loggen uten at noe var galt. Registreringen skjer naa ved innlasting, og
+  gjentas i `Unregister()` fordi `UnregisterAllEvents()` ellers river den ned ved
+  foerste `Deactivate`. `START_LOOT_ROLL` er bevisst ikke flyttet med: auto-rullen
+  maa bli staaende bak `Activate()`, ellers ruller addonet Need eller Pass for deg
+  i tilfeldige pug-raid.
+
+### Hastefiks etter raidkvelden 19.08
+
+Sesong 2s andre raidkveld. 1.9.0 fanget ingen loot og tok
+interesse-popupen med seg hos alle raidere. Fem feil laa bak, alle bekreftet mot
+logger fra kvelden.
+
+### Loot-deteksjonen fanget aldri noe
+
+- **Innsamlingsvinduet er ankret paa rullene, ikke paa killet.** Det var 12
+  sekunder fra `ENCOUNTER_END`. Med Group Loot finnes itemet ikke i noens bag
+  foer rullen er avgjort — paa Nek'zali 19.08 skjedde det 36 sekunder etter
+  killet, altsaa 24 sekunder etter at vinduet hadde stengt. Bag-skannet fant
+  derfor null hver eneste gang. Vinduet starter naa paa 45 sekunder og forlenges
+  av hver `START_LOOT_ROLL` med rullens egen gjenstaaende tid, med et tak paa
+  fem minutter.
+- **`C_TooltipInfo.GetItemByHyperlink` finnes ikke.** Funksjonen heter
+  `GetHyperlink`. Kallet var nil, saa det kastet — og siden det skjedde inne i
+  bag-skannet, doede hele gjennomgangen paa det foerste itemet som ellers ville
+  blitt fanget. Ett item som ikke lar seg lese koster naa det ene itemet, aldri
+  resten av baggen.
+
+### Rapporten inneholdt hele baggen
+
+- **Kun loot fra bossen som nettopp doede rapporteres.** Bag-skannet skilte ikke
+  paa hvor et item kom fra: alt tradeable med handelstid igjen ble sveipet med.
+  Maalt paa The Coiled Altar 19.08 ga det 40 rapporterte items der bare 6 kom fra
+  bossen — de andre 34 hadde ligget i baggen hele kvelden. Det som ligger der
+  naar bossen doer holdes naa utenfor. Vil du ha restlageret, er det
+  `/nordlc addall` som gjoer den jobben.
+- **Taket paa innsamlingen hevet til aatte minutter.** `GetLootRollTimeLeft` ga
+  270 sekunder in-game. Blir liket lootet et minutt etter killet, trengs over
+  fem minutter foer rullen er avgjort — og det gamle taket paa fem stengte da
+  vinduet for tidlig.
+
+### Interesse-popupen krasjet hos alle raidere
+
+- **Samme nil-kall traff popupen.** Et item uten equipLoc — altsaa et
+  tier-token — sendte `GetAvailableCategories` inn i den samme grenen, og
+  popupen doede foer foerste rad ble tegnet. Raiderne saa ingenting.
+- **Popupen venter naa paa at item-data er lastet.** `C_Item.GetItemInfo` svarer
+  nil for et item klienten ikke har cachet, og da ble equipLoc nil og itemet
+  tolket som et token. Popupen bygges foerst naar spillet kan svare for hvert
+  item, med fem sekunders frist foer den bygges likevel.
+
+### Tier
+
+- **Tier-tokens ble filtrert bort foer de ble sjekket.** Spillet klassifiserer et
+  armor token som Miscellaneous/Junk, og «Miscellaneous» sto paa svartelista en
+  linje foer token-sjekken. Hele tier-grenen var doed kode.
+- **Rustningstypen leses ut av `Classes:`-linja.** Et token har underklasse
+  «Junk» og ingen linje som bare sier «Plate», saa den gamle gjenkjenningen traff
+  aldri. Alle klasser paa ett token deler rustningstype.
+- **Alle andre enn lederen auto-passer naa ogsaa paa tokens.** Unntaket var
+  skrevet som «ikke Miscellaneous» for aa spare pets og mounts, men tokens ligger
+  i samme itemklasse. Rullen gikk full tid, og hvem som helst kunne Neede den.
+
+### Fri rull paa pets, toys og mounts
+
+- **Addonet ruller ikke paa pets, toys og mounts i det hele tatt** — heller ikke
+  for raidlederen. Der ruller alle fritt, som foer. Lederen rullet Need
+  automatisk paa alt, og ville dermed snappet hver eneste mount foer noen andre
+  rakk aa svare. Skillet gaar paa itemets underklasse, ikke paa typenavnet, saa
+  tier-tokens havner ikke lenger i samme bunke ved et uhell. Toys spoerres det om
+  for seg, siden de ikke ligger i én bestemt itemklasse.
+
+### Rangeringsvinduet kunne staa tomt
+
+- **Klassen slaas opp med realm.** `UnitClass` godtar et spillernavn, men
+  cross-realm maa realmen vaere med. Den ble strippet, oppslaget ga nil, og koden
+  falt tilbake paa «Warrior» for alle. Paa et token som ikke var Plate ble hver
+  eneste kandidat kastet ut. Ukjent klasse vises naa for offiseren i stedet for
+  aa forsvinne.
+- **Wishlist-filteret fritar tier-slots,** slik knappefilteret alltid har gjort.
+  En raider kunne trykke «Upgrade» paa en tier-del og likevel bli droppet uten et
+  ord.
+
+### Raidere som har addonet, men ikke er aktivert
+
+- **`ROLL_CALL` og `VERSION_CHECK` aktiverer naa klienten.** Begge laa bak
+  aktiv-sjekken, saa en som hadde addonet installert uten aa vaere aktivert
+  svarte aldri. Hun var usynlig baade i `/nordlc version` og i opptellingen ved
+  council-start — og siden en uaktivert klient ikke har registrert noen events,
+  auto-passet hun ikke og rapporterte ingen loot heller. Begge meldingene er
+  bevis paa at en offiser holder paa, saa de aktiverer paa lik linje med at et
+  council starter.
+- **Enhver aktiv officer kringkaster ACTIVATE** naar rosteret endrer seg, ikke
+  bare raidlederen. Er offiseren ikke leder, ble det aldri sendt, og en raider
+  som logget inn eller reloadet ble staaende uaktivert uten aa vite det.
+
+### Nytt
+
+- **`/nordlc addall`** legger alt tradeable i baggen rett i panelet, uten
+  shift-klikking. Panelet er uendret: fjern med X, og trykk Start Council.
+- **`/nordlc diag`** viser hva innsamlingen faktisk gjorde — aktiv, officer,
+  vindu aapnet, ruller, rapporter sendt og mottatt. Loggen overlever `/reload`.
+- **Blaa skrift** paa loot som er fanget opp automatisk.
+- **Blizzards rull-vinduer lukkes** etter at addonet har rullet for deg.
+- **Varsel naar councilet ikke naar fram.** Svarer ingen paa roll call, sier
+  addonet fra i stedet for aa la offiseren tro at alt gikk bra.
+
+### Panelet
+
+- **Loot Detected scroller.** Hoeyden fulgte antall items uten tak, saa tjue
+  items ga et vindu hoeyere enn skjermen, uten noen maate aa naa radene nederst.
+
+### Robusthet — én feil skal ikke ta ned et vindu
+
+- **Radene i interesse-popupen bygges hver for seg, med vakt rundt.** Kastet én
+  rad, doede hele popupen og raideren saa ingenting — det var slik tolv items ble
+  til seks. Naa koster et item vi ikke klarer aa tegne det ene itemet, og du faar
+  vite hvilket. Samme vakt i Loot Detected-panelet.
+- **Trade-vinduet virket ikke.** `CheckInteractDistance` er protected: kallet
+  blokkeres for addons og returnerer nil — og siden «not nil» er sant, sa
+  avstandssjekken ALLTID «for langt unna» og nektet aa starte handelen.
+  Erstattet med `UnitInRange`, som er grovere men faktisk svarer, og den advarer
+  naa i stedet for aa nekte.
+- **Den uferdige loot-rapporten overlever `/reload`.** Den laa kun i minnet, saa
+  en reload midt i innsamlingen kastet alt. Naa lagres den, hentes ved oppstart
+  og sendes — og toemmes ved sending, saa ingenting gaar dobbelt.
+- **Addonet fanger sine egne feil.** `ADDON_ACTION_BLOCKED`,
+  `ADDON_ACTION_FORBIDDEN` og `LUA_WARNING` logges til diagnoseloggen naar de
+  gjelder oss. Det var nettopp en slik blokkering som gjorde trade-vinduet doedt
+  i maanedsvis uten at noen saa det. Hver melding logges én gang.
+- **Fullfoerte handler registreres riktig.** Tre feil laa i sporinga: mottakeren
+  var kun kjent naar handelen ble startet fra vaart eget vindu, saa en manuell
+  trade ble aldri registrert og itemet sto i «venter paa trade» for alltid; vi
+  fjernet foerste oppfoering for personen uansett hva som laa i vinduet, saa gav
+  du ett av tre items forsvant feil rad; og cross-realm-navn («Navn(*)») ble ikke
+  gjenkjent. Mottakeren leses naa fra handelsvinduet, og innholdet fanges paa
+  `TRADE_ACCEPT_UPDATE`.
+- **Hvisk og «kopier navn» i wizard-menyen er guardet.** Begge kalte
+  Blizzard-funksjoner ubeskyttet, midt i en klikk-sti du bruker under utdeling.
+
+### To ting til fra en systematisk RC-gjennomgang
+
+- **Varsel naar handelstida holder paa aa loepe ut.** Nedtellingen ble bare vist
+  mens trade-vinduet sto aapent, og midt i et raid staar det lukket. Gaar de to
+  timene ut, sitter itemet fast hos feil person for godt. Addonet sier naa fra
+  naar noe har under tjue minutter igjen — etter kamp, ikke midt i den, og ikke
+  oftere enn én gang i kvarteret.
+- **Andre deteksjonsvei for loot.** `LOOT_ITEM_ROLL_WON` kommer rett fra spillet
+  naar du vinner en rull, og er uavhengig av baade baggen og handelstid-lesinga.
+  Fanger den opp noe bag-skannet gikk glipp av, blir det med i rapporten
+  likevel. Samme item to veier gir fortsatt én oppfoering.
+
+### Testene
+
+- **Testdataene bruker ekte item-ID-er og inneholder et tier-token.** De gamle
+  var oppdiktede ID-er der alle hadde en ekte slot. Grenen som drepte popupen i
+  kveld var derfor uoppnaaelig for `/nordlc test`, `testloot` og `testpopup` —
+  vi kunne kjoert dem hundre ganger uten aa se noe.
+
 ## 1.9.0 (2026-08-18)
 
 Sesong 2-releasen. Alt siden 1.8.0 (16. juni) — sesong 2-reglene, officer-avstemming, omskrevet loot-deteksjon og roster-import.

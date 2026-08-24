@@ -79,6 +79,10 @@ function NLC.Council.StartMultiSession(items, boss)
   -- Et ekte council overtar: testmodus skal aldri gjelde her.
   NLC.testMode = false
 
+  -- Itemene er tatt i bruk. Uten dette ville en etternoeler-rapport dratt inn
+  -- igjen det offiseren nettopp fjernet fra panelet.
+  NLC.Council.ClearLootAggregation()
+
   activeSessions = {}
   respondents = {}
   raidAddonUsers = 0
@@ -129,6 +133,18 @@ function NLC.Council.StartMultiSession(items, boss)
       NLC.Utils.Print(string.format("|cffffcc00%d av %d kjører en annen versjon enn deg (%s): %s|r",
         #gamle, count, minVer, table.concat(gamle, ", ")))
     end
+    -- Ingen ack i det hele tatt betyr at meldinga ikke naadde fram, eller at
+    -- den krasjet hos mottakerne. Uten dette kan ikke offiseren skille «sendt
+    -- og alt gikk bra» fra «forsvant i stillhet» — og det var nettopp den
+    -- forskjellen som kostet oss kvelden 19.08.
+    if count == 0 then
+      NLC.Utils.Print("|cffff4444Ingen svarte paa roll call.|r Councilet naadde trolig ikke fram.")
+      NLC.Utils.Print("  Sjekk /nordlc version, og at raiderne har addonet aktivert.")
+      NLC.Utils.Diag("ROLL_CALL: null ack - councilet naadde ingen")
+    else
+      NLC.Utils.Diag("ROLL_CALL: " .. count .. " klienter svarte")
+    end
+
     -- Check if enough responses already came in during the 3s window
     local respCount = 0
     for _ in pairs(respondents) do respCount = respCount + 1 end
@@ -157,6 +173,7 @@ function NLC.Council.StartSession(itemLink, itemId, ilvl, equipLoc, boss)
 end
 
 function NLC.Council.OnMultiSessionStart(items, timer, sender)
+  NLC.Utils.Diag("SESSION_START mottatt fra " .. tostring(sender) .. " | " .. #items .. " items")
   activeSessions = {}
   for _, item in ipairs(items) do
     table.insert(activeSessions, {
@@ -209,14 +226,17 @@ function NLC.Council.OnInterestReceived(sender, sessionIdx, category, eqIlvl, ti
   if not session then return end
 
   local name = sender:match("^([^-]+)") or sender
-  local _, class = UnitClass(name)
+  -- Full sender, ikke det avkuttede navnet: cross-realm trenger realmen.
+  local class = NLC.Utils.ClassForPlayer(sender)
 
   session.interests[name] = {
     category = category,
     equippedIlvl = eqIlvl,
     equippedLink = (eqLink and eqLink ~= "") and eqLink or nil,
     tierCount = tierCount,
-    class = class or "WARRIOR",
+    -- Ingen gjetting. «WARRIOR» som standard fikk rustningsfilteret under til aa
+    -- kaste ut alle paa et token som ikke var Plate.
+    class = class,
     note = (note and note ~= "") and note or nil,
   }
 
@@ -310,16 +330,22 @@ function NLC.Council.BuildRanking(session)
 
     -- Tier token filter: exclude candidates whose armor type doesn't match the token
     local skipCandidate = false
-    if session.armorType then
+    if session.armorType and interest.class then
+      -- Kun naar vi FAKTISK kjenner klassen. Ukjent klasse skal vises og
+      -- vurderes av offiseren, ikke forsvinne stille ut av lista.
       local classArmor = NLC.Utils.CLASS_ARMOR[interest.class]
-      if classArmor ~= session.armorType then
+      if classArmor and classArmor ~= session.armorType then
         skipCandidate = true
       end
     end
 
     -- Wishlist safety filter: skip "upgrade" candidates if item not on their wishlist
     -- (front-end also hides the button, but this handles stale import data edge cases)
-    if not skipCandidate and interest.category == "upgrade" and session.itemId then
+    -- Tier-slots er fritatt, akkurat som i knappefilteret (Utils.IsTierSlot).
+    -- Uten unntaket kunne raideren trykke «Upgrade» paa en tier-del og likevel
+    -- bli kastet ut her — og var alle svarene paa en tier-del, ble lista tom.
+    if not skipCandidate and interest.category == "upgrade" and session.itemId
+       and not (session.armorType or NLC.Utils.IsTierSlot(session.equipLoc)) then
       if imported and imported.wishlist and #imported.wishlist > 0 then
         local wishlisted = false
         for _, wid in ipairs(imported.wishlist) do
@@ -575,7 +601,17 @@ function NLC.Council.RemoveCandidate(name)
 end
 
 function NLC.Council.WhisperCandidate(name)
-  ChatFrame_SendTell(name)
+  -- Guardet av samme grunn som tooltip-oppslaget i Utils: et Blizzard-navn som
+  -- forsvinner mellom klientversjoner kaster, og her ligger kallet i en
+  -- meny-klikkhandler midt i utdelingen. Da skal det koste hvisken, ikke wizarden.
+  if type(ChatFrame_SendTell) ~= "function" then
+    NLC.Utils.Print("Kan ikke aapne hvisk i denne klientversjonen. Skriv /w " .. name)
+    return
+  end
+  local ok = pcall(ChatFrame_SendTell, name)
+  if not ok then
+    NLC.Utils.Print("Klarte ikke aapne hvisk. Skriv /w " .. name)
+  end
 end
 
 -- ============================================================
@@ -743,9 +779,22 @@ local _agg = {}          -- itemKey -> item
 local _aggTimer = nil
 local _aggBoss = nil
 
+-- Toemmes naar councilet faktisk starter, ikke naar panelet vises. Se under.
+function NLC.Council.ClearLootAggregation()
+  _agg = {}
+  _aggBoss = nil
+  if _aggTimer then _aggTimer:Cancel(); _aggTimer = nil end
+end
+
 function NLC.Council.OnLootReport(sender, data)
-  if not NLC.isOfficer then return end
+  if not NLC.isOfficer then
+    NLC.Utils.Diag("LOOT_REPORT fra " .. tostring(sender) .. " forkastet - jeg er ikke officer")
+    return
+  end
   if not data or not data.items then return end
+  NLC.Utils.Diag("LOOT_REPORT mottatt fra " .. tostring(sender) .. " | " .. #data.items .. " items")
+  -- Ny boss = ny runde. Ellers bygger vi videre paa det som allerede ligger.
+  if data.boss and _aggBoss and data.boss ~= _aggBoss then _agg = {} end
   _aggBoss = data.boss or _aggBoss
   for _, it in ipairs(data.items) do
     -- Dedup across senders (an item can only be looted once). Client already
@@ -753,13 +802,19 @@ function NLC.Council.OnLootReport(sender, data)
     local key = (it.itemId or 0) .. ":" .. (it.looter or sender)
     if not _agg[key] then _agg[key] = it end
   end
-  -- Open/extend a 5s collection window from the first report.
+  -- Vent til det har vaert stille i 10 sekunder, og vis SUMMEN av alt som har
+  -- kommet inn for denne bossen — ikke bare siste pulje.
+  --
+  -- Klientene stenger ikke samtidig lenger: hver enkelt forlenger sitt eget
+  -- innsamlingsvindu etter rullene den selv er med i, saa en som ikke kunne
+  -- rulle paa noe melder foer de andre. Med en pulje som ERSTATTET forrige ville
+  -- den foerste rapporten forsvunnet fra panelet i det neste kom inn.
   if _aggTimer then _aggTimer:Cancel() end
-  _aggTimer = C_Timer.NewTimer(5, function()
+  _aggTimer = C_Timer.NewTimer(10, function()
     _aggTimer = nil
     local items = {}
     for _, it in pairs(_agg) do table.insert(items, it) end
-    _agg = {}
+    NLC.Utils.Diag("Aggregering ferdig | " .. #items .. " items totalt -> panel")
     if #items > 0 then
       NLC.LootDetection._setDetected(items)
       NLC.UI.ShowLootDetected(items)
