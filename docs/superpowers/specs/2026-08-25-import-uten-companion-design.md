@@ -91,6 +91,48 @@ NLC1:<base64 av LibDeflate-komprimert AceSerializer-blob>
 utdelinger er under 1 KB. Begge deler limes uten problemer inn i en flerlinjes
 `EditBox` — samme størrelsesorden som en WeakAura.
 
+## Hva importen MÅ inneholde (funnet 25.08, utvider omfanget)
+
+Nettsida er autoriteten — addonet skal lese, ikke regne. Men kanalen mellom dem
+bærer i dag bare halve regelverket, og den andre halvparten er delvis ødelagt.
+
+**1. Sim-poengene mangler helt.** Regelteksten (`sesong2-regler-discord.md`) sier to
+ting om sims: de gir **0–8 poeng**, og — linje 74 — *«Alt simmes: har du ikke sim lagt
+inn i WowAudit, blir du ikke vurdert på den bossen.»* Begge deler regnes ut i
+`app/api/loot/route.ts` når officeren velger et item, og forlater aldri nettleseren.
+
+Addonet kan derfor verken score sims eller håndheve porten. I spillet står en spiller
+uten sims som en helt vanlig kandidat. **Dette er et avvik fra et vedtatt og publisert
+regelverk**, ikke en manglende finesse. Addonet legger i stedet på en flat tier-bonus
+(+3/+1) der nettsida bruker sim-gevinst — to ulike tall for samme item.
+
+**2. Wishlistene i eksporten er alltid tomme — bekreftet i produksjon.**
+`addon-export/route.ts` henter `/v1/characters` og leser `c.wishlist` av
+karakterobjektet. Nettsidas egen rangering henter i tillegg **`/v1/wishlists`** — det
+er der dataene faktisk ligger (`app/api/loot/route.ts:186-190`).
+
+Feilen er stille med vilje: `catch { /* wishlist is optional — don't block export */ }`.
+
+Målt i `NordavindLC_Import` fra prod 24.08: **alle 34 spillere har `wishlist = {}`**.
+Konsekvensen er at wishlist-filteret i `Council.lua` — som krever `#wishlist > 0` for
+å slå til — **aldri har gjort noe siden det ble skrevet**. Det er testdekket og dødt.
+
+**Følger av dette:**
+
+- Eksporten må hente wishlists fra `/v1/wishlists`, ikke fra `/v1/characters`.
+- Eksporten må ta med sim-tallene: per spiller, per item, `total_percentage` for
+  gjeldende vanskelighetsgrad — samt et eksplisitt «har sims / har ikke sims»-flagg
+  for gjeldende vanskelighetsgrad, så porten kan håndheves i spillet.
+- Feilene skal ikke lenger svelges. Klarer ikke eksporten å hente wishlists eller
+  sims, skal pakka si det, og addonet skal vise det i statuslinja — ellers gjentar
+  nøyaktig denne feilen seg, stille, i et år til.
+- Størrelse: sim-data per item per spiller er den eneste posten som kan gjøre pakka
+  vesentlig større enn de målte 11,6 KB. Begrens til items i **gjeldende raid** og
+  gjeldende vanskelighetsgrad; mål på nytt før formatet spikres.
+
+Alt dette sitter i **én fil** på nettsida (`app/api/loot/addon-export/route.ts`) og
+er derfor ett sted å rette, ikke tre.
+
 ## Nettsida
 
 Én ny side, `/loot/addon`, bak Discord-innlogging og officer-gate (`isLeader` finnes

@@ -6,3 +6,6 @@
 roster_dump.json
 
 # companion/ har sin egen .gitignore for node_modules og dist.
+
+# Lokale backuper (inneholder SavedVariables med spillerdata)
+backup/
