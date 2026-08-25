@@ -133,6 +133,61 @@ Konsekvensen er at wishlist-filteret i `Council.lua` — som krever `#wishlist >
 Alt dette sitter i **én fil** på nettsida (`app/api/loot/addon-export/route.ts`) og
 er derfor ett sted å rette, ikke tre.
 
+## Audit av kontrakten addon ↔ nettside (25.08)
+
+Gjennomgang av hvert punkt der de to må være enige.
+
+**Verifisert likt — ikke rør disse uten å endre begge sider:**
+
+| Kontrakt | Detalj |
+|---|---|
+| Terningen | FNV-1a, konstantene `2166136261` / `16777619`, seed `itemName\|YYYY-MM-DD\|playerName`, UTC på begge sider |
+| Sorteringa | Web: rank → score → færrest loot → terning. Addon: samme, med kategori som ekstra bøtte øverst |
+| Rangorden | `exportRank` sender `bench` mens bryteren er av; addonets `rankOrder` gir bench 4 → sist. Slås den på, sendes `backup` → 2, over trial |
+| Straffede kategorier | `PENALISED` = `PENALISED_CATEGORIES` = upgrade + catalyst |
+| Loot-straff | −10 denne uka begge steder; addonet legger kun på for utdelinger etter siste import |
+| Oppmøtekrav | 90 begge steder |
+| Ukesgrensa | Web: onsdag 07:00 Europe/Oslo. Addon: `C_DateAndTime.GetSecondsUntilWeeklyReset`, fallback onsdag 06:00 UTC |
+| Utdelinger opp | `item`, `awardedTo`, `awardedBy`, `boss`, `category`, `timestamp`, `note` |
+| Redigeringer | `originalTimestamp`, `item`, `newAwardedTo`, `newCategory` |
+| Ikke-eksporterbart | disenchant/bank/free settes `exportable = false` og lastes aldri opp |
+
+Kategoribøtta i addonet er **ikke** et avvik: nettsida kan strukturelt ikke ha den,
+siden interessesvarene kun finnes in-game.
+
+**Avvik — alle med samme rot, at den item-avhengige halvdelen aldri forlater nettsida:**
+
+1. Sim-poengene 0–8 finnes ikke i addonet.
+2. Sim-porten (regeltekst linje 74) håndheves kun på nettsida.
+3. **Wishlist-filteret er STRENGERE i addonet enn på nettsida.** Se under.
+4. Tier: nettsida bruker sim-gevinst, addonet flatt +3/+1.
+
+**Fire felter sendes uten å leses:** `healthPots`, `dpsPots`, `mplusEffort`,
+`deathPenalty`. Harmløst, men ren vekt i hver pakke.
+
+### Punkt 3 er en felle, ikke bare et avvik
+
+`Council.lua` utelukker en «upgrade»-kandidat hvis itemet ikke står på hans
+wishlist. `app/api/loot/route.ts` gjør **ikke** det — den porten ble fjernet med
+vilje, og kommentaren sier hvorfor: *«0 % i sim utelukker IKKE lenger noen. De
+teller som kandidat og taper bare de 0-8 sim-poengene.»* En utdatert sim skulle
+ikke få overstyre oppmøte, parse og rank når sims bare veier 8.
+
+Addonets filter har vært **usynlig fordi wishlista alltid har vært tom**. Det
+våkner i samme øyeblikk som eksport-fiksen deployes.
+
+⚠️ **Derfor må eksport-fiksen og addon-endringen ut samtidig.** Deployes
+eksporten alene, får vi et nytt avvik i stedet for å fjerne et: spillet ville
+kastet ut kandidater nettsida beholder. Addonet skal slutte å utelukke og i
+stedet gi 0 sim-poeng, akkurat som nettsida.
+
+### Målt dekning (25.08)
+
+`[api/loot] No sims for …` i containerloggen viser **29 av 34 med sims for
+heroic**. De fem uten — `Bobletount`, `Imyappedup`, `Hardusnus`, `Konedaskeren`,
+`Shotgrogg` — er alter og folk utenfor rosteret. Dekningen er altså ikke
+problemet; strengheten er.
+
 ## Nettsida
 
 Én ny side, `/loot/addon`, bak Discord-innlogging og officer-gate (`isLeader` finnes
