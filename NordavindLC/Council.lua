@@ -796,10 +796,24 @@ function NLC.Council.OnLootReport(sender, data)
   -- Ny boss = ny runde. Ellers bygger vi videre paa det som allerede ligger.
   if data.boss and _aggBoss and data.boss ~= _aggBoss then _agg = {} end
   _aggBoss = data.boss or _aggBoss
+  -- Dedup paa tvers av AVSENDERE: samme item rapportert av to klienter er ett
+  -- item. Men to EKSEMPLARER av samme item i samme rapport er to items, og de
+  -- skal begge med.
+  --
+  -- 24.08 sto det «Sendte LOOT_REPORT: 5 items» og ti sekunder senere
+  -- «Aggregering ferdig | 4 items totalt -> panel». Noekkelen var itemId:looter,
+  -- saa det andre eksemplaret av Frostscale's Mystic Frond forsvant uten et ord.
+  -- Det ble likevel delt ut — men foerst etter at lederen tydde til
+  -- /nordlc addall, som ser hele baggen og gaar utenom aggregeringa.
+  --
+  -- Telleren er per MELDING. To eksemplarer i én rapport gir #1 og #2; den samme
+  -- rapporten fra en annen avsender starter paa #1 igjen og treffer dermed samme
+  -- noekkel som foer. Begge egenskapene beholdes altsaa samtidig.
+  local forekomst = {}
   for _, it in ipairs(data.items) do
-    -- Dedup across senders (an item can only be looted once). Client already
-    -- deduped by GUID, so itemId+looter is enough here.
-    local key = (it.itemId or 0) .. ":" .. (it.looter or sender)
+    local grunnlag = (it.itemId or 0) .. ":" .. (it.looter or sender)
+    forekomst[grunnlag] = (forekomst[grunnlag] or 0) + 1
+    local key = grunnlag .. "#" .. forekomst[grunnlag]
     if not _agg[key] then _agg[key] = it end
   end
   -- Vent til det har vaert stille i 10 sekunder, og vis SUMMEN av alt som har
