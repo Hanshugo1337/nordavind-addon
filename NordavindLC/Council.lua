@@ -351,8 +351,18 @@ function NLC.Council.BuildRanking(session)
     -- Kun naar sim-dataene faktisk kom fram. Feilet hentingen, staar hasSims
     -- falskt for ALLE, og da skal ingen utestenges — systemet skal feile mot aa
     -- ikke straffe.
-    if not skipCandidate and imported and imported.hasSims == false
-       and NLC.Scoring.SimDataOk() then
+    -- AV SOM STANDARD. Maalt mot prod 25.08: 18 av 34 har sims for heroic, og
+    -- blant de 16 uten er ALLE healerne — Braxina, Sindessa, Sondimonk, Thepear.
+    -- Sims for healere er upaalitelige, saa de legges ikke inn. Porten ville
+    -- dermed utestengt hele healer-gruppa fra all upgrade-loot.
+    --
+    -- Nettsida haandhever den allerede, og har altsaa gjort nettopp dette hele
+    -- sesongen uten at noen oppdaget det. Det er en regeldiskusjon for officers,
+    -- ikke noe et addon skal innfoere paa egen haand kvelden foer et raid.
+    --
+    -- Skrus paa med: /run NordavindLC_NS.db.config.simPort = true
+    if not skipCandidate and NLC.db.config.simPort and imported
+       and imported.hasSims == false and NLC.Scoring.SimDataOk() then
       skipCandidate = true
     end
 

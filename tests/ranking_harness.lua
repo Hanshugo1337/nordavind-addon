@@ -164,9 +164,15 @@ assert(#NLC.Council.BuildRanking(vanlig) == 1,
 print("sim-porten, data ute : OK -> ingen utestengt naar hentingen feilet")
 
 simDataOk = true
+assert(#NLC.Council.BuildRanking(vanlig) == 1,
+       "porten er AV som standard - healerne har ingen sims og ville forsvunnet")
+print("sim-porten av        : OK -> ingen utestengt naar porten er av")
+
+NLC.db.config.simPort = true
 assert(#NLC.Council.BuildRanking(vanlig) == 0,
-       "uten sims skal spilleren ikke vurderes paa bossen")
-print("sim-porten, data inne: OK -> uten sims, ikke kandidat")
+       "slaas porten paa, skal spilleren uten sims ikke vurderes")
+print("sim-porten paa       : OK -> uten sims, ikke kandidat")
+NLC.db.config.simPort = nil
 
 harSims["Moggin"] = nil
 simDataOk = false
