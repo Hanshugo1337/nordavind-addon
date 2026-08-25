@@ -143,11 +143,14 @@ fyr("ENCOUNTER_END", 3510, "The Coiled Altar", 14, 28, 1)
 spolTil(1)
 assert(fyr("START_LOOT_ROLL", 1), "START_LOOT_ROLL maa vaere registrert")
 
--- Rullen avgjoeres, to ekte drops lander.
-spolTil(200)
+-- Rullen avgjoeres, to ekte drops lander. +40 s er det MAALTE tidspunktet:
+-- RCLootCouncil-loggen fra Nek'zali viser vinnerne paa +36, +43 og +45 s.
+-- Her sto det tidligere +200 s, fra den gang vinduet ventet ut hele
+-- rullefristen paa 270 s. Se ROLL_SETTLE i LootDetection.lua.
+spolTil(40)
 leggIBag(4, "Ny-A")
 leggIBag(5, "Ny-B")
-assert(fyr("BAG_UPDATE_DELAYED"), "vinduet skal fortsatt staa aapent paa +200 s")
+assert(fyr("BAG_UPDATE_DELAYED"), "vinduet skal staa aapent paa +40 s")
 
 -- Vinduet stenger og rapporten gaar.
 spolTil(600)
@@ -165,10 +168,37 @@ assert(#alle == 5,
        "addall skal se hele baggen (5), fikk " .. #alle)
 print("addall               : OK -> ser alle 5, uavhengig av rapporten")
 
--- --- Taket maa romme en rull paa 270 s som starter sent ---
--- Rullen startet paa +1 s her, saa 1 + 270 + 12 = 283 s. Vinduet maa ha vaert
--- aapent paa +200 s, noe paastanden over allerede beviste.
-print("rull paa 270 s       : OK -> vinduet holdt til rullen var avgjort")
+-- --- Sen rull: vinduet er stengt, men vinneren skal likevel fanges ---
+--
+-- Dette er sikkerhetsnettet under ROLL_SETTLE. Vi venter ikke lenger ut hele
+-- rullefristen, og da MAA en rull som avgjoeres etterpaa vekke innsamlingen
+-- igjen. Uten dette ville tidlig stenging betydd tapte items — og da hadde
+-- kuren vaert verre enn sykdommen.
+do
+  local sendteFoer = sendte
+  sendte = {}
+  baggen = {}
+  LD.Unregister()
+  LD.Register()
+  NordavindLC_NS.db.pendingReport = nil
+
+  fyr("ENCOUNTER_END", 3510, "Sen-Rull", 14, 28, 1)
+  spolFram(1)
+  fyr("START_LOOT_ROLL", 1)
+
+  -- +121 s: vinduet stengte for lengst (45 + 12 s etter rullen startet).
+  spolFram(120)
+  local SEN = "|cffa335ee|Hitem:66666::::::::90:::::|h[Sen-Kappe]|h|r"
+  fyr("LOOT_ITEM_ROLL_WON", SEN, 1, 1, 42, false)
+
+  spolFram(700)
+  local sene = rapportert()
+  assert(#sene == 1, "sen rull ble ikke fanget: forventet 1, fikk " .. #sene ..
+         " (" .. table.concat(sene, ", ") .. ")")
+  assert(sene[1] == "Sen-Kappe", "feil item fra sen rull: " .. sene[1])
+  print("sen rull vekker      : OK -> fanget selv om vinduet hadde stengt")
+  sendte = sendteFoer
+end
 
 -- --- Overlever en uferdig rapport en /reload? ---
 --

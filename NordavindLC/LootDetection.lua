@@ -425,6 +425,23 @@ local COLLECT_ROLL_GRACE = 12    -- monn etter at siste rull kan vaere ute
 local COLLECT_MAX = 480          -- absolutt tak, regnet fra ENCOUNTER_END
 local DEFAULT_ROLL_SECONDS = 270 -- hvis GetLootRollTimeLeft ikke svarer
 
+-- Hvor lenge vi venter paa at en rull skal SETTE SEG, uansett hva fristen sier.
+--
+-- 270 sekunder er hvor lenge en rull KAN vare, ikke hvor lenge den varer. Alle
+-- med addonet passer automatisk og lederen Needer automatisk, saa rullene er
+-- avgjort paa sekunder: RCLootCouncil-loggen fra Nek'zali viser vinnerne paa
+-- +36, +43 og +45 sekunder. Ventet vi ut fristen, stengte innsamlingen foerst
+-- paa +283 s og panelet kom paa +293 s — nesten fem minutter etter killet, med
+-- loot synlig i baggen hele tiden. Da griper folk til /nordlc addall i stedet,
+-- og det gjorde de hver eneste boss 24.08.
+--
+-- Aa stenge tidlig er trygt: LOOT_ITEM_ROLL_WON VEKKER vinduet igjen (se
+-- extendCollection), reportedGUIDs hindrer dobbeltrapportering, og officeren
+-- legger sen loot til i panelet som allerede staar aapent (Council.OnLootReport
+-- bygger videre paa samme boss). En sen rull koster altsaa en ekstra runde —
+-- ikke et tapt item.
+local ROLL_SETTLE = 45
+
 -- Items vi VET vi vant, uavhengig av hva baggen sier.
 --
 -- Bag-skannet har to ledd som kan svikte: itemet maa ligge i baggen naar vi ser
@@ -576,8 +593,12 @@ lootFrame:SetScript("OnEvent", function(self, event, ...)
     -- innsamlingen aapen til den er avgjort, ellers stenger vi foer itemet finnes.
     local ms = GetLootRollTimeLeft and GetLootRollTimeLeft(rollID)
     local rollSeconds = (ms and ms > 0) and (ms / 1000) or DEFAULT_ROLL_SECONDS
-    extendCollection(rollSeconds + COLLECT_ROLL_GRACE)
-    dbg(string.format("START_LOOT_ROLL | rull %.0fs igjen | vindu forlenget", rollSeconds))
+    -- Vi venter paa at rullen setter seg, ikke paa at fristen loeper ut. Se
+    -- ROLL_SETTLE: fristen er et tak spillet oppgir, ikke en varighet.
+    local ventetid = math.min(rollSeconds, ROLL_SETTLE)
+    extendCollection(ventetid + COLLECT_ROLL_GRACE)
+    dbg(string.format("START_LOOT_ROLL | rull %.0fs igjen | venter %.0fs + %ds monn",
+      rollSeconds, ventetid, COLLECT_ROLL_GRACE))
 
     -- Auto-roll behaviour; capture itself happens via ScanBags.
     local link = GetLootRollItemLink(rollID)

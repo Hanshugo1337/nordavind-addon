@@ -113,8 +113,13 @@ GetLootRollItemLink = function() return "[Soulcoiler Ritual Vessel]" end
 GetLootRollItemInfo = function()
   return nil, nil, nil, 4, nil, true, nil, nil, nil, nil, nil, nil, true
 end
--- Rullen sto paa ~42 s da den startet, jf. loggen (+1 s -> avgjort +36..45 s).
-local rullMsIgjen = 42000
+-- Hva GetLootRollTimeLeft FAKTISK svarer naar rullen starter: 270 sekunder.
+-- Maalt i diagloggen fra raidet 2026-08-24 ("START_LOOT_ROLL | rull 270s igjen",
+-- seks ganger). Her sto det tidligere 42000 — et tall som var lest ut av NAAR
+-- itemsa landet (+36..45 s), ikke ut av hva spillet svarer. Med 42 s stengte
+-- vinduet paa +54 s og alt saa riktig ut; med det ekte tallet stenger det
+-- foerst paa +283 s, og panelet kommer nesten fem minutter etter killet.
+local rullMsIgjen = 270000
 GetLootRollTimeLeft = function() return rullMsIgjen end
 
 -- --- Addon-stubber ---
