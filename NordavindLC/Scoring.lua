@@ -9,6 +9,46 @@ local NLC = NordavindLC_NS
 -- rukket å oppdatere seg, og rekkefølgen i raidet blir en annen enn nettsidens.
 local WEEKLY_LOOT_PENALTY = 10
 
+-- Sim-poeng. MÅ følge SIM_MAX_POINTS og SIM_FULL_AT_PERCENT i
+-- nordavind-web/app/api/loot/route.ts. Regelteksten gir sims 0-8, og full score
+-- ved 5 % upgrade.
+--
+-- To ledd i nettsidas formel speiles IKKE her, fordi tallene ikke finnes i
+-- importen:
+--   * Rabatten når spilleren har et bedre item i SAMME SLOT fra en annen boss
+--     (nettsida ganger da ned med forholdet mellom de to prosentene).
+--   * Tier-gevinsten fra TIER_SIMS. Tier-deler får derfor ingen sim-poeng her —
+--     addonet beholder sin flate tier-bonus i stedet, se TierAdjustment.
+-- Begge gjør addonet mildere enn nettsida, aldri strengere.
+local SIM_MAX_POINTS = 8
+local SIM_FULL_AT_PERCENT = 5
+
+--- Sim-poeng for en upgrade-prosent. Nil-prosent gir 0.
+function NLC.Scoring.SimPoints(pct)
+  if type(pct) ~= "number" or pct <= 0 then return 0 end
+  local p = pct * (SIM_MAX_POINTS / SIM_FULL_AT_PERCENT)
+  if p > SIM_MAX_POINTS then p = SIM_MAX_POINTS end
+  return p
+end
+
+--- Sim-prosenten spilleren har for ett item.
+---
+--- Nøklene kommer fra JSON via companion, og der blir tall til STRENGER. Vi slår
+--- derfor opp begge veier — ellers finner vi aldri noe, uten å feile synlig.
+function NLC.Scoring.SimPctFor(imported, itemId)
+  if not imported or not imported.simPct or not itemId then return nil end
+  local v = imported.simPct[itemId]
+  if v == nil then v = imported.simPct[tostring(itemId)] end
+  return type(v) == "number" and v or nil
+end
+
+--- Er sim-dataene til å stole på? Feilet hentingen på nettsida, står hasSims
+--- falskt for alle, og da skal INGEN utestenges på det grunnlaget.
+function NLC.Scoring.SimDataOk()
+  local d = NLC.db and NLC.db.importData
+  return d ~= nil and d.kilder ~= nil and d.kilder.sims == "ok"
+end
+
 -- Hvilke kategorier som teller som loot. MÅ følge PENALISED i
 -- nordavind-web/lib/scoring.ts og app/api/loot/route.ts. Offspec og tmog er
 -- fritatt: teller addonet dem mens nettsiden ikke gjør det, henger det et
@@ -89,6 +129,15 @@ function NLC.Scoring.Calculate(imported, live, playerName)
     local tierAdj = NLC.Scoring.TierAdjustment(live.tierCount)
     score = score + tierAdj
     table.insert(breakdown, { label = "Tier bonus", value = tierAdj })
+  elseif live and live.simPct then
+    -- Sim-poeng gis kun utenfor tier: der bruker nettsida tier-gevinsten i
+    -- stedet, og den har vi ikke. Uten dette skillet ville en tier-del faatt
+    -- baade flat bonus og sim-poeng, altsaa dobbelt opp.
+    local simP = NLC.Scoring.SimPoints(live.simPct)
+    if simP > 0 then
+      score = score + simP
+      table.insert(breakdown, { label = "Sim", value = math.floor(simP * 10 + 0.5) / 10 })
+    end
   end
 
   return score, breakdown

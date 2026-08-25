@@ -325,6 +325,10 @@ function NLC.Council.BuildRanking(session)
       )),
     }
 
+    -- Sim-prosenten for NETTOPP dette itemet. Uten den ga addonet 0 av de 8
+    -- vedtatte sim-poengene, og rangerte derfor annerledes enn nettsida.
+    live.simPct = NLC.Scoring.SimPctFor(imported, session.itemId)
+
     local score, breakdown = NLC.Scoring.Calculate(imported, live, name)
     local warnings = NLC.Scoring.GetWarnings(imported, name)
 
@@ -339,21 +343,31 @@ function NLC.Council.BuildRanking(session)
       end
     end
 
-    -- Wishlist safety filter: skip "upgrade" candidates if item not on their wishlist
-    -- (front-end also hides the button, but this handles stale import data edge cases)
-    -- Tier-slots er fritatt, akkurat som i knappefilteret (Utils.IsTierSlot).
-    -- Uten unntaket kunne raideren trykke «Upgrade» paa en tier-del og likevel
-    -- bli kastet ut her — og var alle svarene paa en tier-del, ble lista tom.
-    if not skipCandidate and interest.category == "upgrade" and session.itemId
-       and not (session.armorType or NLC.Utils.IsTierSlot(session.equipLoc)) then
-      if imported and imported.wishlist and #imported.wishlist > 0 then
-        local wishlisted = false
-        for _, wid in ipairs(imported.wishlist) do
-          if wid == session.itemId then wishlisted = true; break end
-        end
-        if not wishlisted then skipCandidate = true end
-      end
+    -- Sim-porten. Regelteksten linje 74: «Alt simmes — har du ikke sim lagt inn
+    -- i WowAudit, blir du ikke vurdert paa den bossen.» Nettsida haandhever den
+    -- allerede (hasSims i app/api/loot/route.ts); dette er den samme porten i
+    -- spillet.
+    --
+    -- Kun naar sim-dataene faktisk kom fram. Feilet hentingen, staar hasSims
+    -- falskt for ALLE, og da skal ingen utestenges — systemet skal feile mot aa
+    -- ikke straffe.
+    if not skipCandidate and imported and imported.hasSims == false
+       and NLC.Scoring.SimDataOk() then
+      skipCandidate = true
     end
+
+    -- HER LAA WISHLIST-FILTERET, og det er fjernet med vilje.
+    --
+    -- Det utelukket en «upgrade»-kandidat hvis akkurat dette itemet ikke stod paa
+    -- wishlista hans. Nettsida sluttet med nettopp det — kommentaren i
+    -- app/api/loot/route.ts sier hvorfor: «0 % i sim utelukker IKKE lenger noen.
+    -- De teller som kandidat og taper bare de 0-8 sim-poengene.» En utdatert sim
+    -- skal ikke overstyre oppmoete, parse og rank naar sims veier 8.
+    --
+    -- Filteret var usynlig saa lenge wishlista alltid var tom (eksporten spurte
+    -- feil endepunkt). I det den feilen ble rettet, ville det vaaknet og gjort
+    -- addonet STRENGERE enn nettsida. Uten sim-poeng faller de nå naturlig
+    -- nedover lista i stedet, akkurat som paa nettsida.
 
     if not skipCandidate then
 

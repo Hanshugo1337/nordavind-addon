@@ -57,13 +57,18 @@ NLC.isOfficer = true
 NLC.db = { config = { timer = 90 }, importData = { players = {} }, weeklyLoot = { counts = {} } }
 
 local wishlister = {}
+local harSims = {}        -- navn -> false naar spilleren mangler sims
+local simDataOk = false   -- svarer paa om sim-hentingen lyktes
 NLC.Scoring = {
   GetImportedScore = function(navn)
-    return { rank = "raider", role = "dps", baseScore = 40, wishlist = wishlister[navn] or {} }
+    return { rank = "raider", role = "dps", baseScore = 40, wishlist = wishlister[navn] or {},
+             hasSims = harSims[navn] }
   end,
   Calculate = function() return 40, {} end,
   GetWarnings = function() return {} end,
   SeasonLootCount = function() return 0 end,
+  SimPctFor = function() return nil end,
+  SimDataOk = function() return simDataOk end,
 }
 NLC.Comms = { Send = function() end, SendMultiSession = function() end,
               SendRollCall = function() end, IsRestricted = function() return false end }
@@ -135,15 +140,35 @@ assert(#tierRangert == 1,
        "tier-slot ble filtrert bort av wishlist-filteret — front-end fritar den, rangeringen maa ogsaa")
 print("tier-slot + wishlist : OK -> beholdt, som i knappefilteret")
 
--- --- 5: vanlig slot uten wishlist skal fortsatt filtreres ---
+-- --- 5: item utenfor wishlista skal IKKE lenger utelukke noen ---
+--
+-- Endret 2026-08-25. Filteret utelukket kandidaten helt; nettsida sluttet med
+-- det med vilje («0 % i sim utelukker IKKE lenger noen»), og addonet var dermed
+-- strengere enn regelverket. Nå står han i lista og taper bare sim-poengene.
 local vanlig = {
   sessionIdx = 3, itemLink = "|cffa335ee|Hitem:270162::::::::90:::::|h[Ring]|h|r",
   itemId = 270162, ilvl = 671, equipLoc = "INVTYPE_FINGER",
   interests = { Moggin = { category = "upgrade", equippedIlvl = 660, tierCount = 2, class = "WARLOCK" } },
   phase = "ranking",
 }
+assert(#NLC.Council.BuildRanking(vanlig) == 1,
+       "item utenfor wishlista skal gi 0 sim-poeng, ikke utestengelse")
+print("utenfor wishlista    : OK -> beholdt, som paa nettsida")
+
+-- --- 6: sim-porten (regeltekst linje 74) ---
+harSims["Moggin"] = false
+
+simDataOk = false
+assert(#NLC.Council.BuildRanking(vanlig) == 1,
+       "feilet sim-henting skal ALDRI utestenge noen")
+print("sim-porten, data ute : OK -> ingen utestengt naar hentingen feilet")
+
+simDataOk = true
 assert(#NLC.Council.BuildRanking(vanlig) == 0,
-       "wishlist-filteret skal fortsatt gjelde utenfor tier-slots")
-print("vanlig slot          : OK -> wishlist-filteret gjelder fortsatt")
+       "uten sims skal spilleren ikke vurderes paa bossen")
+print("sim-porten, data inne: OK -> uten sims, ikke kandidat")
+
+harSims["Moggin"] = nil
+simDataOk = false
 
 print("\nALLE PAASTANDER HOLDT")

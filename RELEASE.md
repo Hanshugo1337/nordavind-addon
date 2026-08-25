@@ -12,7 +12,7 @@ release koster en raidkveld.
 ```
 for h in ranking lootpanel popupcache comms bagbacklog session tiertoken \
          manualscan lootwindow tooltipapi theme lootroll roster \
-         errorcapture trade avvisning inaktivlogg aggregering; do
+         errorcapture trade avvisning inaktivlogg aggregering simpoeng; do
   python -c "from lupa import LuaRuntime; LuaRuntime().execute(open('tests/${h}_harness.lua',encoding='utf-8').read())"
 done
 ```
