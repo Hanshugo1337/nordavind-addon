@@ -1,6 +1,6 @@
 # NordavindLC Changelog
 
-## 1.9.2 (uutgitt)
+## 1.9.2 (2026-08-26)
 
 ### Auto-pass i pug — kun raidlederen kan skru addonet paa
 
