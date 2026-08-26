@@ -214,7 +214,12 @@ local ROLL_PASS, ROLL_NEED, ROLL_GREED, ROLL_TRANSMOG = 0, 1, 2, 4
 -- mid-rebuild is dropped with no error to show for it.
 local function rollLater(rollID, rollType)
   C_Timer.After(0.05, function()
-    RollOnLoot(rollID, rollType)
+    -- pcall fordi kallet kommer 0,05 s etter eventet: rullen kan ha loept ut,
+    -- spilleren kan ha klikket selv, eller START_LOOT_ROLL kan ha fyrt paa nytt
+    -- for samme rollID etter en reconnect. Uten pcall gir det en roed Lua-feil
+    -- midt i bossen - og verre: `lukk` under kjoerer aldri, saa rull-vinduet
+    -- blir staaende. Tjuefem ruller per boss gjoer det til feilspam.
+    pcall(RollOnLoot, rollID, rollType)
     -- Rull-vinduet blir staaende etter at vi har svart for spilleren. Over en
     -- kveld er det tjuefem popups folk maa klikke bort selv om addonet allerede
     -- har rullet. RunNextFrame er den presise primitiven; C_Timer.After(0) gjoer

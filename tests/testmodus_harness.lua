@@ -58,8 +58,13 @@ NordavindLC_NS = {
     DeepCopy = function(t) return t end,
   },
   Comms = { Register = function() end, Send = function() end },
-  Council = {}, UI = {},
-  LootDetection = { Register = function() end, Unregister = function() end },
+  -- UI og LootDetection stubbes bredt: /nordlc testloot vil vise panelet, og
+  -- riggen bryr seg kun om flaggene kommandoen setter.
+  Council = {},
+  UI = setmetatable({}, { __index = function() return function() end end }),
+  LootDetection = setmetatable(
+    { Register = function() end, Unregister = function() end, GetDroppedItems = function() return {} end },
+    { __index = function() return function() end end }),
   Trade = {}, Scoring = {}, Roster = {},
   pendingSessions = {},
 }
@@ -134,5 +139,28 @@ NLC.testMode, NLC.active, iRaid = true, true, true
 fyr("GROUP_ROSTER_UPDATE")
 assert(deaktiveringer == 1, "ryddet ikke ved GROUP_ROSTER_UPDATE — invitasjon i byen slipper unna")
 print("invitert i byen       : OK -> ryddet")
+
+-- --- 5: /nordlc testloot maa ogsaa sette testMode ---
+--
+-- Funnet i audit 26.08. testloot satte `active` uten `testMode`, og rydderen
+-- ser kun paa testMode. Et hengende `active` BLOKKERER lederens ACTIVATE
+-- (Comms: «if not NLC.active and fraLeder»), saa klienten staar uten auto-pass
+-- og uten loot-rapport resten av kvelden. RELEASE.md punkt 5 paalegger nettopp
+-- denne kommandoen foer hver release — fella laa altsaa i selve roeyktesten.
+NLC.active, NLC.testMode, NLC.isOfficer, iRaid = false, false, false, false
+SlashCmdList["NORDLC"]("testloot")
+assert(NLC.active, "testloot aktiverte ikke")
+assert(NLC.testMode, "testloot satte ikke testMode — da rydder ryddTestmodus den aldri")
+
+NLC.active, NLC.testMode, iRaid = true, true, true
+fyr("PLAYER_ENTERING_WORLD")
+assert(deaktiveringer == 1, "flagget fra testloot ble ikke ryddet da vi kom i raid")
+print("testloot ryddes       : OK")
+
+-- --- 6: Deactivate nullstiller isOfficer ---
+NLC.active, NLC.isOfficer, NLC.testMode = true, true, true
+NLC.Deactivate()
+assert(not NLC.isOfficer, "isOfficer sto igjen — klienten tror den er officer i neste raid")
+print("Deactivate rydder     : OK")
 
 print("\nALLE PAASTANDER HOLDT")

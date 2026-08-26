@@ -297,6 +297,10 @@ end
 function NLC.Deactivate()
   NLC.active = false
   NLC.testMode = false
+  -- testkommandoene setter denne for aa vise utdelingsknappene solo. Ble den
+  -- staaende, trodde klienten den var officer i neste raid og aggregerte
+  -- LOOT_REPORT den ikke skulle sett.
+  NLC.isOfficer = false
   NLC.LootDetection.Unregister()
   NLC.Utils.Print("Deactivated.")
 end
@@ -724,6 +728,13 @@ SlashCmdList["NORDLC"] = function(msg)
   elseif cmd == "testloot" then
     NLC.isOfficer = true
     NLC.active = true
+    -- MAA settes her ogsaa. ryddTestmodus ser kun paa testMode, saa uten den
+    -- ble flagget staaende etter /nordlc testloot - og et hengende active
+    -- BLOKKERER lederens ACTIVATE (Comms.lua: «if not NLC.active and fraLeder»).
+    -- Da kjoerer Activate() aldri, LootDetection registreres aldri, og du staar
+    -- uten auto-pass og uten loot-rapport resten av kvelden. Uten feilmelding.
+    -- RELEASE.md punkt 5 paalegger nettopp denne kommandoen foer hver release.
+    NLC.testMode = true
     -- Simulate boss loot drop with multiple items
     local fakeItems = {
       { itemLink = "|cffa335ee|Hitem:270162::::::::90:::::|h[Soulcoiler Ritual Vessel]|h|r", itemId = 270162, ilvl = 671, equipLoc = "INVTYPE_CHEST", boss = "Test Boss", looter = "Player1" },
