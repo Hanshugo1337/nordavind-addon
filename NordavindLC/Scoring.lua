@@ -125,10 +125,29 @@ function NLC.Scoring.Calculate(imported, live, playerName)
     table.insert(breakdown, { label = "Base (web)", value = 0 })
   end
 
-  if live and live.isTier and live.tierCount then
+  if live and live.isTier and imported and imported.tierGain then
+    -- Tier-gevinsten fra nettsida, ikke den flate tabellen under.
+    --
+    -- Addonet regnet tier med `TierAdjustment` (+3 om du har 1 eller 3 brikker,
+    -- +1 om du har 0 eller 2). Den er rolle- og spec-blind, og `GetTierCount`
+    -- teller forrige tiers brikker som gjeldende. Resultatet var at nettsida og
+    -- addonet rangerte tier nesten omvendt: maalt 26.08 sto Mohp foerst paa
+    -- nettsida (3 gjeldende brikker, én unna 4-set) og NEST SIST i addonet,
+    -- som saa fem brikker totalt og ga ham null.
+    --
+    -- Nettsida har baade riktig spec og riktig brikketall, saa den regner det
+    -- ut og sender prosenten i importen. Samme formel som der: 5 % gir full
+    -- pott, taket er 8.
+    local poeng = math.min(8, imported.tierGain * (8 / 5))
+    score = score + poeng
+    table.insert(breakdown, { label = "Tier", value = math.floor(poeng * 10 + 0.5) / 10 })
+
+  elseif live and live.isTier and live.tierCount then
+    -- Fallback for gamle importer uten tierGain. Beholder den gamle
+    -- oppfoerselen framfor aa gi null tier-vurdering.
     local tierAdj = NLC.Scoring.TierAdjustment(live.tierCount)
     score = score + tierAdj
-    table.insert(breakdown, { label = "Tier bonus", value = tierAdj })
+    table.insert(breakdown, { label = "Tier bonus (gammel)", value = tierAdj })
   elseif live and live.simPct then
     -- Sim-poeng gis kun utenfor tier: der bruker nettsida tier-gevinsten i
     -- stedet, og den har vi ikke. Uten dette skillet ville en tier-del faatt

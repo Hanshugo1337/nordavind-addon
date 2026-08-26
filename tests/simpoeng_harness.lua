@@ -76,4 +76,40 @@ NLC.db.importData = { players = {}, kilder = { sims = "ok" } }
 assert(NLC.Scoring.SimDataOk() == true, "ok = stolbar")
 print("kildesjekken         : OK -> kun \"ok\" aapner for sim-porten")
 
+
+-- ============================================================
+-- Tier-gevinst fra nettsida (lagt til 26.08 etter audit)
+-- ============================================================
+--
+-- Addonet regnet tier med en flat tabell mens nettsida brukte sim-gevinst.
+-- Maalt mot ekte data samme dag rangerte de to nesten omvendt: Mohp sto foerst
+-- paa nettsida og nest sist i addonet. Naa sender importen prosenten.
+
+local function poeng(imported, live)
+  local s = NLC.Scoring.Calculate(imported, live, "Test")
+  return s
+end
+
+-- Mohp: 3 gjeldende brikker, én unna 4-set. Nettsida gir 10.9 % -> taket paa 8.
+local medGevinst = poeng({ baseScore = 0, tierGain = 10.9 }, { isTier = true, tierCount = 5 })
+assert(math.abs(medGevinst - 8) < 0.01,
+       "tier-gevinst ble ikke 8 poeng ved 10.9 %, fikk " .. tostring(medGevinst))
+
+-- Lav gevinst skal gi lave poeng, ikke flat bonus.
+local lav = poeng({ baseScore = 0, tierGain = 1.05 }, { isTier = true, tierCount = 1 })
+assert(math.abs(lav - 1.68) < 0.05, "1.05 % skulle gitt 1.68 poeng, fikk " .. tostring(lav))
+
+-- Uten tierGain (gammel import) skal den flate tabellen fortsatt virke, slik at
+-- en klient med utdatert import ikke mister tier-vurderingen helt.
+local gammel = poeng({ baseScore = 0 }, { isTier = true, tierCount = 1 })
+assert(math.abs(gammel - 3) < 0.01, "fallback ga ikke +3 ved 1 brikke, fikk " .. tostring(gammel))
+
+-- tierCount fra spillet skal IKKE lenger paavirke resultatet naar nettsida har
+-- sendt en gevinst. Det var hele feilen: addonet talte forrige tiers brikker.
+local a = poeng({ baseScore = 0, tierGain = 4.0 }, { isTier = true, tierCount = 0 })
+local b = poeng({ baseScore = 0, tierGain = 4.0 }, { isTier = true, tierCount = 4 })
+assert(math.abs(a - b) < 0.01, "spillets brikketall paavirket fortsatt tier-poengene")
+
+print("tier-gevinst fra web  : OK -> 8 ved taket, 1.68 ved 1.05 %, fallback +3")
+
 print("\nALLE PAASTANDER HOLDT")
