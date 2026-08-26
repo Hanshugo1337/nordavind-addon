@@ -1,5 +1,51 @@
 # NordavindLC Changelog
 
+## 1.9.2 (uutgitt)
+
+### Auto-pass i pug — kun raidlederen kan skru addonet paa
+
+Tilbakemelding 26.08: «Vi pugga tidligere, da passa den for flere av oss.»
+Ingen av dem hadde startet addonet.
+
+Regelen har alltid vaert at lederen faar popupen og sier ja, og at resten
+foelger. Chatlinja lovte det ogsaa — «Activated by raid leader.» — men
+avsenderen ble aldri sjekket. Fire veier inn utenom lederen:
+
+- `ACTIVATE` ble godtatt fra hvem som helst.
+- `ACTIVATE_CHECK` ble besvart av alle som var aktive. Siden hver klient spoer
+  12 ganger over 60 sekunder ved innlogging, holdt det at én i raidet hadde
+  flagget hengende igjen — saa smittet det til alle med addonet.
+- Roster-oppdateringer kringkastet `ACTIVATE` fra enhver *officer*, og
+  `CheckOfficer` gir den rangen til alle som leder en vilkaarlig gruppe eller
+  har rank <= 2 i en vilkaarlig guild.
+- `SESSION_START`, `ROLL_CALL` og `VERSION_CHECK` aktiverte ogsaa, fra hvem som
+  helst.
+
+Kilden til de hengende flaggene var `/nordlc test` og `/nordlc testloot`, som
+setter `active` for at utdelingsknappene skal kunne oeves solo. Flagget ble
+aldri ryddet og fulgte med inn i neste raid.
+
+Rettet:
+
+- **All fjernaktivering krever naa at meldinga kommer fra den som leder gruppa.**
+  «Vet ikke hvem lederen er» teller som nei, ikke ja.
+- **Bare lederen svarer paa `ACTIVATE_CHECK`.** Svaret *er* en aktivering hos
+  mottakeren, saa ingen andre har lov til aa gi det.
+- **Testmodus ryddes naar du kommer i et raid.**
+- **`ROLL_CALL` og `VERSION_CHECK` besvares fortsatt uansett hvem som spoer.**
+  Aa svare og aa skru paa auto-passet er skilt: en installert men uaktivert
+  klient maa fortsatt vaere synlig i opptellingen og for `/nordlc version`
+  (Braxina-saken 19.08), men hun aktiveres ikke lenger av det.
+
+Navnematchen taaler cross-realm og norske navn: realmen strippes med
+`Ambiguate`, og AE, OE og AA senkes for haand. `string.lower` kan ikke brukes —
+den senker byte for byte etter lokalet og gjoer «Æver» om til noe som ikke er et
+navn. Ny testrigg: `tests/aktivering_harness.lua`.
+
+Konsekvens aa vaere klar over: er council-offiseren ikke raidleder, aktiveres
+ingen av seg selv. Det henger sammen med resten — auto-Need og utdelingen
+forutsetter allerede at lederen er den som deler ut.
+
 ## 1.9.1 (2026-08-19)
 
 ### Diagnose (lagt til 22.08, foer release)

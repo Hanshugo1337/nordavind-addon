@@ -255,6 +255,77 @@ function NLC.Utils.IsTierSlot(equipLoc)
   return equipLoc ~= nil and TIER_SLOTS[equipLoc] == true
 end
 
+-- Er disse to navnene den samme spilleren?
+--
+-- Avsenderen på en comms-melding kommer som «Navn-Realm», mens raid-rosteret
+-- like gjerne svarer «Navn». Realmen må derfor bort på begge sider før vi
+-- sammenligner. Ambiguate er spillets egen stripper og tar tilfellene et
+-- mønster på bindestrek ikke tar.
+--
+-- Kasus må også bort, og det er ikke en formalitet i denne guilda: UnitIsUnit
+-- sammenligner «Æver» og «æver» som to ulike spillere. Med et norsk roster er
+-- det navn vi faktisk har. Derfor ren strengsammenligning i små bokstaver,
+-- med UnitIsUnit kun som ekstra ja — aldri som eneste kilde.
+--
+-- string.lower kan IKKE brukes på navn her. Den senker byte for byte etter
+-- lokalet, og et norsk navn er ikke én byte per tegn: «Æ» er 0xC3 0x86 i
+-- UTF-8. Testriggen fanget den — string.lower senket 0xC3 til 0xE3 og gjorde
+-- «Æver» om til noe som ikke er et navn i det hele tatt. Derfor senkes ASCII
+-- for hånd, og Latin-1-tillegget (Æ Ø Å É …) med sin egen byte-regel.
+local function smaaBokstaver(navn)
+  navn = navn:gsub("[A-Z]", function(c) return string.char(c:byte() + 32) end)
+  return (navn:gsub("\195([\128-\158])", function(b)
+    local kode = b:byte()
+    if kode == 0x97 then return "\195" .. b end -- U+00D7 er gangetegn, ikke bokstav
+    return "\195" .. string.char(kode + 0x20)
+  end))
+end
+
+function NLC.Utils.ErSammeSpiller(a, b)
+  if not a or not b or a == "" or b == "" then return false end
+
+  local function kort(navn)
+    if Ambiguate then
+      local ok, res = pcall(Ambiguate, navn, "short")
+      if ok and res and res ~= "" then navn = res end
+    else
+      navn = navn:match("^([^-]+)") or navn
+    end
+    return smaaBokstaver(navn)
+  end
+
+  local ka, kb = kort(a), kort(b)
+  if ka == kb then return true end
+
+  local ok, res = pcall(UnitIsUnit, ka, kb)
+  return (ok and res) == true
+end
+
+-- Navnet på den som leder gruppa, eller nil hvis vi ikke vet.
+--
+-- Rang 2 i GetRaidRosterInfo er lederen. Returnerer nil framfor å gjette:
+-- kallere bruker dette til å avgjøre hvem som har lov til å skru addonet på
+-- hos andre, og «vet ikke» må bety nei der.
+function NLC.Utils.GruppelederNavn()
+  if not IsInRaid or not IsInRaid() then return nil end
+  for i = 1, (GetNumGroupMembers and GetNumGroupMembers() or 0) do
+    local navn, rang = GetRaidRosterInfo(i)
+    if navn and rang == 2 then return navn end
+  end
+  return nil
+end
+
+-- Er avsenderen den som leder gruppa akkurat nå?
+--
+-- Porten for all fjernaktivering. Se aktivering_harness: uten den kunne hvem
+-- som helst med et hengende active-flagg skru på auto-passet hos hele raidet,
+-- og i en pug betyr det at alle passer på alt uten å ha bedt om noe.
+function NLC.Utils.ErGruppeleder(avsender)
+  local leder = NLC.Utils.GruppelederNavn()
+  if not leder then return false end
+  return NLC.Utils.ErSammeSpiller(avsender, leder)
+end
+
 -- Klassetoken for en spiller i raidet, eller nil hvis vi ikke vet.
 --
 -- UnitClass tar en unit-id. Et spillernavn duger som unit-id for folk i gruppa

@@ -36,6 +36,19 @@ local function GetLastWednesdayResetUTC()
   return FIRST_RESET + weeksSince * WEEK
 end
 
+-- Testmodus har ingenting i et raid aa gjoere.
+--
+-- /nordlc test og /nordlc testloot setter active for at utdelingsknappene skal
+-- kunne oeves solo. Flagget ble aldri ryddet, saa det fulgte med inn i neste
+-- raid — og aktiv addon betyr auto-pass paa alt. Den klienten satt da og passet
+-- i en pug uten at eieren hadde bedt om noe.
+local function ryddTestmodus()
+  if NLC.testMode and IsInRaid() then
+    NLC.Deactivate()
+    NLC.Utils.Print("Testmodus avsluttet — du kom i et raid.")
+  end
+end
+
 -- Initialize
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
@@ -72,6 +85,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
     NLC.Utils.Print("Loaded. Use /nordlc for commands.")
 
   elseif event == "PLAYER_ENTERING_WORLD" or event == "PARTY_LEADER_CHANGED" then
+    ryddTestmodus()
     if IsInRaid() and not NLC.active then
       C_Timer.After(2, function()
         if IsInRaid() and not NLC.active then
@@ -107,17 +121,27 @@ frame:SetScript("OnEvent", function(self, event, arg1)
     end
 
   elseif event == "GROUP_ROSTER_UPDATE" then
+    -- Blir du invitert mens du staar i byen, fyrer ikke PLAYER_ENTERING_WORLD.
+    ryddTestmodus()
     -- Deactivate when no longer in raid
     if not IsInRaid() and NLC.active then
       NLC.Deactivate()
       NLC.Utils.Print("Deaktivert (forlot raid).")
     end
-    -- Enhver AKTIV officer kringkaster ACTIVATE naar rosteret endrer seg — ikke
-    -- bare raidlederen. Er offiseren ikke leder, ble dette aldri sendt, og en
-    -- raider som logget inn eller reloadet sto uaktivert. En uaktivert klient
-    -- har ingen events registrert: ingen auto-pass, ingen bag-scan, ingen
-    -- rapport. Det var stille, og det saa ut som om addonet ikke virket.
-    if NLC.active and IsInRaid() and (NLC.isOfficer or UnitIsGroupLeader("player")) then
+    -- Kun raidlederen kringkaster ACTIVATE naar rosteret endrer seg, saa en
+    -- raider som logger inn eller reloader midt i kvelden blir tatt opp igjen.
+    --
+    -- Her sto «NLC.isOfficer or UnitIsGroupLeader», og isOfficer er billig:
+    -- CheckOfficer gir den til alle som leder en vilkaarlig gruppe eller har
+    -- rank <= 2 i en vilkaarlig guild. Hver aktiv officer kringkastet altsaa
+    -- til alle med addonet, ogsaa i en pug. Mottakersiden slipper naa uansett
+    -- bare lederen gjennom (se Comms.OnMessage), men avsenderen skal ikke sende
+    -- det heller — da slipper vi aa forklare meldinger ingen skal ha.
+    --
+    -- Konsekvens: er council-offiseren ikke raidleder, aktiveres ingen av seg
+    -- selv. Det henger sammen med resten — auto-Need og utdelingen forutsetter
+    -- allerede at lederen er den som deler ut, jf. NLC.IsLootLeader.
+    if NLC.active and IsInRaid() and UnitIsGroupLeader("player") then
       NLC.Comms.Send("ACTIVATE", "")
     end
 

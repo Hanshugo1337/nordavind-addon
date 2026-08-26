@@ -108,40 +108,52 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
   local success, msgType, data = NLC.Comms:Deserialize(message)
   if not success then return end
 
-  -- ACTIVATE is handled before active check (activates non-leader raiders)
+  -- All fjernaktivering krever at meldinga kommer fra den som leder gruppa.
+  --
+  -- Regelen har alltid vaert at lederen faar popupen og at resten foelger.
+  -- Chatlinja lovte det ogsaa — «Activated by raid leader.» — men avsenderen
+  -- ble aldri sjekket. Dermed kunne hvem som helst med et hengende
+  -- active-flagg, typisk etter /nordlc test, skru paa auto-passet hos alle med
+  -- addonet. 26.08 skjedde det i en pug: flere passet paa alt uten aa ha
+  -- startet noe. Se tests/aktivering_harness.lua.
+  --
+  -- «Vet ikke hvem lederen er» maa bety nei, ikke ja. GruppelederNavn gir nil
+  -- utenfor raid og foer rosteret er lest, og da slipper ingenting gjennom.
+  local fraLeder = NLC.Utils.ErGruppeleder(sender)
+
   if msgType == "ACTIVATE" then
-    if not NLC.active then
+    if not NLC.active and fraLeder then
       NLC.Activate()
-      NLC.Utils.Print("Activated by raid leader.")
+      NLC.Utils.Print("Aktivert av raidlederen.")
     end
     return
   end
 
-  -- Someone asking if addon is active — anyone who is active responds
+  -- Et spoersmaal om noen holder paa. Svaret ER en aktivering hos mottakeren,
+  -- saa bare lederen har lov til aa gi det. Svarte alle som var aktive, holdt
+  -- det at én i raidet hadde flagget hengende igjen — da smittet det videre.
   if msgType == "ACTIVATE_CHECK" then
-    if NLC.active then
+    if NLC.active and UnitIsGroupLeader("player") then
       NLC.Comms.Send("ACTIVATE", "")
     end
     return
   end
 
-  -- SESSION_START also auto-activates (in case raider missed ACTIVATE or joined late)
-  if not NLC.active and msgType == "SESSION_START" then
-    NLC.Activate()
-    NLC.Utils.Print("Activated by council session.")
+  -- Svar foer aktiveringsporten, uansett hvem som spoer.
+  --
+  -- En installert men uaktivert klient MAA vaere synlig for /nordlc version og
+  -- for opptellingen ved council-start — det var Braxina-saken 19.08. Aa svare
+  -- er noe helt annet enn aa skru paa auto-passet, og bare det siste krever
+  -- lederen. Derfor ligger svarene her og aktiveringen rett under.
+  if msgType == "ROLL_CALL" then
+    NLC.Comms.Send("ROLL_CALL_ACK", NLC.Utils.AddonVersion())
+  elseif msgType == "VERSION_CHECK" then
+    NLC.Comms.Send("VERSION_REPLY", NLC.version)
   end
 
-  -- ROLL_CALL og VERSION_CHECK aktiverer ogsaa.
-  --
-  -- Begge laa UNDER porten under her, saa en som hadde addonet installert men
-  -- ikke aktivert svarte aldri — hun var usynlig baade for /nordlc version og
-  -- for opptellingen ved council-start. Verre: en uaktivert klient har ingen
-  -- events registrert i det hele tatt, saa hun auto-passet ikke og rapporterte
-  -- ingen loot heller. Stille, og umulig aa se utenfra.
-  --
-  -- Begge meldingene er bevis paa at en offiser holder paa akkurat naa, saa de
-  -- er like gode aktiveringsgrunner som SESSION_START.
-  if not NLC.active and (msgType == "ROLL_CALL" or msgType == "VERSION_CHECK") then
+  -- Lederen holder paa akkurat naa: like god aktiveringsgrunn som ACTIVATE.
+  if not NLC.active and fraLeder and
+     (msgType == "SESSION_START" or msgType == "ROLL_CALL" or msgType == "VERSION_CHECK") then
     NLC.Activate()
     NLC.Utils.Print("Aktivert av council-oppkall.")
   end
@@ -181,12 +193,9 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
       NLC.Council.OnSessionClose(data)
     end
 
-  elseif msgType == "ROLL_CALL" then
-    -- Versjonen ligger i ack-en, ikke i en egen runde. Rundturen kjøres
-    -- likevel ved hver council-start, og uten dette har offiseren ingen måte å
-    -- se at noen kjører en gammel versjon som rangerer annerledes.
-    NLC.Comms.Send("ROLL_CALL_ACK", NLC.Utils.AddonVersion())
-
+  -- ROLL_CALL og VERSION_CHECK besvares over aktiveringsporten, ikke her.
+  -- Versjonen ligger i ack-en, ikke i en egen runde: uten den har offiseren
+  -- ingen måte å se at noen kjører en gammel versjon som rangerer annerledes.
   elseif msgType == "ROLL_CALL_ACK" then
     if NLC.Council.OnRollCallAck then
       NLC.Council.OnRollCallAck(sender, data)
@@ -218,9 +227,6 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
     if NLC.Council.OnVoteCast then
       NLC.Council.OnVoteCast(sender, data)
     end
-
-  elseif msgType == "VERSION_CHECK" then
-    NLC.Comms.Send("VERSION_REPLY", NLC.version)
 
   elseif msgType == "VERSION_REPLY" then
     if NLC.versionCheckResults then

@@ -23,6 +23,7 @@ IsInRaid = function() return true end
 UnitName = function() return "Braxina" end
 UnitIsGroupLeader = function() return false end
 GetTime = function() return 0 end
+Ambiguate = function(navn) return (navn:match("^([^-]+)")) or navn end
 Enum = { AddOnRestrictionType = {}, AddOnRestrictionState = {} }
 
 local sendt = {}
@@ -51,6 +52,9 @@ NordavindLC_NS = {
     Diag = function() end,
     AddonVersion = function() return "1.9.1" end,
     TableCount = function() return 0 end,
+    -- Hvem som er leder styres per scenario. Selve navnematchen har sin egen
+    -- rigg (aktivering_harness); her testes dispatchen, ikke matchen.
+    ErGruppeleder = function(avsender) return avsender == _G.LEDER_NAVN end,
   },
   Council = {}, UI = {}, LootDetection = {}, Comms = {},
 }
@@ -65,9 +69,12 @@ end
 
 dofile("NordavindLC/Comms.lua")
 
-local function motta(msgType, data)
+-- Avsenderen er en menig med mindre scenariet sier noe annet.
+_G.LEDER_NAVN = "Revohunt-TwistingNether"
+
+local function motta(msgType, data, avsender)
   sendt = {}
-  NLC.Comms.OnMessage("NordLC", { msgType, data }, "RAID", "Bobletount-Draenor")
+  NLC.Comms.OnMessage("NordLC", { msgType, data }, "RAID", avsender or "Bobletount-Draenor")
 end
 
 local function harSendt(t)
@@ -76,21 +83,25 @@ local function harSendt(t)
 end
 
 -- --- 1: uaktivert klient svarer paa ROLL_CALL ---
+--
+-- Aa SVARE og aa AKTIVERE er to ting, og de ble skilt 26.08. Svaret gaar
+-- uansett hvem som spoer — ellers er hun usynlig i opptellingen, som var hele
+-- poenget over. Aktiveringen krever lederen, se test 6.
 NLC.active = false
 aktiveringer = 0
 motta("ROLL_CALL", "")
-assert(NLC.active, "ROLL_CALL aktiverte ikke en installert, men uaktivert klient")
 assert(harSendt("ROLL_CALL_ACK"),
        "svarte ikke paa ROLL_CALL — hun forblir usynlig i opptellingen")
-print("ROLL_CALL uaktivert   : OK -> aktiverte og svarte")
+assert(not NLC.active, "ROLL_CALL fra en menig skrudde paa auto-passet")
+print("ROLL_CALL uaktivert   : OK -> svarer, aktiverer ikke")
 
 -- --- 2: uaktivert klient svarer paa VERSION_CHECK ---
 NLC.active = false
 motta("VERSION_CHECK", "")
-assert(NLC.active, "VERSION_CHECK aktiverte ikke")
 assert(harSendt("VERSION_REPLY"),
        "svarte ikke paa VERSION_CHECK — /nordlc version viser henne som «uten addon»")
-print("VERSION_CHECK uaktiv. : OK -> aktiverte og svarte")
+assert(not NLC.active, "VERSION_CHECK fra en menig skrudde paa auto-passet")
+print("VERSION_CHECK uaktiv. : OK -> svarer, aktiverer ikke")
 
 -- --- 3: allerede aktiv skal fortsatt svare, uten aa aktivere paa nytt ---
 NLC.active = true
@@ -110,10 +121,17 @@ assert(not NLC.active, "ACTIVATE_CHECK skal ikke aktivere av seg selv")
 assert(aktiveringer == 0, "aktiverte paa et spoersmaal")
 print("ACTIVATE_CHECK        : OK -> aktiverer ikke")
 
--- --- 5: ACTIVATE aktiverer, som foer ---
+-- --- 5: ACTIVATE fra lederen aktiverer, som foer ---
 NLC.active = false
-motta("ACTIVATE", "")
-assert(NLC.active, "ACTIVATE sluttet aa aktivere")
-print("ACTIVATE              : OK -> aktiverer fortsatt")
+motta("ACTIVATE", "", _G.LEDER_NAVN)
+assert(NLC.active, "ACTIVATE fra lederen sluttet aa aktivere")
+print("ACTIVATE fra leder    : OK -> aktiverer fortsatt")
+
+-- --- 6: ROLL_CALL fra lederen aktiverer OG svarer ---
+NLC.active = false
+motta("ROLL_CALL", "", _G.LEDER_NAVN)
+assert(NLC.active, "ROLL_CALL fra lederen aktiverte ikke")
+assert(harSendt("ROLL_CALL_ACK"), "svarte ikke lederen")
+print("ROLL_CALL fra leder   : OK -> aktiverte og svarte")
 
 print("\nALLE PAASTANDER HOLDT")
