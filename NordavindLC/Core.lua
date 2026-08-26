@@ -217,7 +217,7 @@ function NordavindLC_OnAddonCompartmentClick(_, button)
     if NLC.active then
       NLC.Deactivate()
     else
-      NLC.Activate()
+      NLC.AktiverManuelt()
     end
   end
 end
@@ -245,6 +245,29 @@ end
 
 function NLC.UpdateMinimapCount()
   -- No-op: compartment doesn't support dynamic count display
+end
+
+-- Manuell paaskruing: kun raidlederen.
+--
+-- Ingen andre TRENGER aa aktivere. Lederen sier ja i popupen, og resten tas av
+-- ACTIVATE — enten kringkastet ved neste roster-oppdatering, eller som svar paa
+-- ACTIVATE_CHECK, som hver klient sender selv ved innlogging. Lot vi kommandoen
+-- staa aapen, var den bare en vei rundt lederporten i Comms: en raider som
+-- skrev /nordlc activate i en pug auto-passet paa alt.
+--
+-- Utenfor raid slipper alle gjennom. Der finnes ingen rull aa passe paa, og
+-- offiseren maa kunne aapne addonet og se over importen foer folk er invitert.
+--
+-- Porten gaar én vei. Deactivate er ikke gated: den som ble aktivert av lederen
+-- maa alltid kunne skru av igjen.
+function NLC.AktiverManuelt()
+  if IsInRaid() and not UnitIsGroupLeader("player") then
+    NLC.Utils.Print("Bare raidlederen aktiverer NordavindLC.")
+    NLC.Utils.Print("  Du blir skrudd paa automatisk naar lederen gjoer det.")
+    return false
+  end
+  NLC.Activate()
+  return true
 end
 
 function NLC.Activate()
@@ -453,7 +476,7 @@ SlashCmdList["NORDLC"] = function(msg)
     return
 
   elseif cmd == "activate" then
-    NLC.Activate()
+    NLC.AktiverManuelt()
   elseif cmd == "deactivate" then
     NLC.Deactivate()
   elseif cmd == "pending" then

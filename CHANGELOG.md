@@ -37,6 +37,26 @@ Rettet:
   klient maa fortsatt vaere synlig i opptellingen og for `/nordlc version`
   (Braxina-saken 19.08), men hun aktiveres ikke lenger av det.
 
+### Manuell paaskruing stengt for alle andre enn lederen
+
+Lederporten over stengte fjernaktiveringen, men `/nordlc activate` og
+hoeyreklikk paa addon-ikonet sto fortsatt aapne for alle. Det var bare en vei
+rundt porten: en raider som skrev kommandoen i en pug auto-passet paa alt.
+
+Ingen andre enn lederen *trenger* aa aktivere. Lederen sier ja i popupen, og
+resten tas av `ACTIVATE` — enten kringkastet ved neste roster-oppdatering,
+eller som svar paa `ACTIVATE_CHECK`, som hver klient sender selv ved
+innlogging.
+
+- **Er du i et raid og ikke leder, sier kommandoen nei** og forklarer at du blir
+  skrudd paa automatisk.
+- **Utenfor raid slipper alle gjennom.** Der finnes ingen rull aa passe paa, og
+  offiseren maa kunne se over importen foer folk er invitert.
+- **`deactivate` er ikke gated.** Porten gaar én vei: den som ble aktivert av
+  lederen maa alltid kunne skru av igjen.
+
+Ny testrigg: `tests/manuellaktivering_harness.lua`.
+
 Navnematchen taaler cross-realm og norske navn: realmen strippes med
 `Ambiguate`, og AE, OE og AA senkes for haand. `string.lower` kan ikke brukes —
 den senker byte for byte etter lokalet og gjoer «Æver» om til noe som ikke er et
