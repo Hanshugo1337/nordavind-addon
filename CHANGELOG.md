@@ -1,5 +1,48 @@
 # NordavindLC Changelog
 
+## 1.9.3 (2026-08-26)
+
+### /nordlc testloot etterlot et flagg som blokkerte lederens ACTIVATE
+
+Funnet i en gjennomgang samme dag. `testloot` satte `NLC.active` uten
+`NLC.testMode`, og rydderen ser kun paa `testMode`. Et hengende `active`
+BLOKKERER aktivering fra lederen — `Comms` sjekker «if not NLC.active and
+fraLeder» — saa `Activate()` kjoerer aldri, `LootDetection` registreres aldri,
+og klienten staar uten auto-pass og uten loot-rapport resten av kvelden. Ingen
+feilmelding.
+
+Fella laa i selve roeyktesten: `RELEASE.md` punkt 5 paalegger `/nordlc
+testloot` foer hver release.
+
+`Deactivate` nullstiller naa ogsaa `isOfficer`, som ellers ble haengende og
+fikk klienten til aa aggregere `LOOT_REPORT` den ikke skulle sett.
+
+### Tier regnes naa likt i addonet og paa nettsida
+
+Addonet brukte sin egen flate tabell: +3 om du har 1 eller 3 brikker, +1 om du
+har 0 eller 2. Den er rolle- og spec-blind, og `GetTierCount` teller forrige
+tiers brikker som gjeldende.
+
+Maalt mot ekte data 26.08 rangerte de to nesten omvendt. Mohp sto **foerst** paa
+nettsida — 3 gjeldende brikker, én unna 4-set, den stoerste gevinsten som
+finnes — og **nest sist** i addonet, som saa fem brikker totalt og ga ham null.
+
+Nettsida har baade riktig spec og riktig brikketall, saa den regner ut
+gevinsten og sender den i importen som `tierGain`. Addonet gjoer den om til
+poeng med samme formel som nettsida: 5 % gir full pott, taket er 8.
+
+Uten `tierGain` i importen brukes den gamle tabellen som foer, saa en klient
+med utdatert import mister ikke tier-vurderingen.
+
+**Krever ny import:** kjoer companion og `/reload`. Uten det har addonet ingen
+`tierGain` og faller tilbake paa den gamle tabellen.
+
+### RollOnLoot er pcall-et
+
+Kallet kommer 0,05 s etter eventet, saa en utloept rull, et manuelt klikk eller
+en gjenfyrt `START_LOOT_ROLL` etter reconnect ga roed Lua-feil midt i bossen —
+og `lukk` kjoerte da aldri, saa rull-vinduet ble staaende. 25 ruller per boss.
+
 ## 1.9.2 (2026-08-26)
 
 ### Auto-pass i pug — kun raidlederen kan skru addonet paa
