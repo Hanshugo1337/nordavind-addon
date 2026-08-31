@@ -1,5 +1,37 @@
 # NordavindLC Changelog
 
+## 1.9.5 (2026-09-01)
+
+To endringer, ingen av dem roerer hvordan addonet oppfoerer seg i et raid.
+
+### Handelsflyten logger til diag
+
+Da et item ble staaende som ventende etter en handel 31.08 fantes det ingen
+spor: TRADE_SHOW, TRADE_ACCEPT_UPDATE og UI_INFO_MESSAGE skrev ingenting.
+Eneste bevis var hva som laa igjen i baggen, og det er for lite til aa skille to
+helt ulike feil fra hverandre — samme kveld sto ett item igjen som ventende mens
+et annet var borte fra lista uten aa vaere levert.
+
+Loggen viser naa hvem mottakeren ble lest som og fra hvilken av de fire kildene,
+hva som laa i vinduet, hvilken gren som kjoerte, og hvilke rader som ble fjernet.
+**Ingen atferdsendring** — fiksen kommer naar en raidkveld har gitt data.
+Be om `/nordlc diag` etter foerste handel.
+
+### Defensiv-terskelen staar ett sted, og teksten stemmer
+
+`0.8` sto hardkodet i if-en, som en fjerde kopi av tallet nordavind-web har.
+Endret man det ene, fikk samme spiller advarsel paa nettsida men ikke i addonet.
+Heter naa `DEFENSIVE_WARN_BELOW`, med samme «MAA foelge»-kommentar som
+ukesstraffen og sim-poengene.
+
+Teksten var ogsaa feil. «%.1f/fight» leses som antall kast, men tallet er en
+ANDEL av knappene spilleren har — nevneren er spec-normalisert paa web-sida, saa
+1.5 betyr 150 % av knappene sine, ikke halvannet kast.
+
+⚠️ Krever ny import for at de nye defensiv-tallene skal vises: web regner dem
+spec-normalisert fra 31.08, saa en Mage og en Holy Priest faar helt andre tall
+enn foer.
+
 ## 1.9.4 (2026-08-31)
 
 Tagget FOER in-game roeyktest, paa brukers valg: `RELEASE.md` punkt 5 og 6
