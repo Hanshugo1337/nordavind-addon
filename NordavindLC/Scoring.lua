@@ -9,6 +9,19 @@ local NLC = NordavindLC_NS
 -- rukket å oppdatere seg, og rekkefølgen i raidet blir en annen enn nettsidens.
 local WEEKLY_LOOT_PENALTY = 10
 
+-- Under hvor mye defensivbruk vi advarer. MÅ følge terskelen i
+-- nordavind-web/app/api/loot/route.ts — står de på ulike tall, får samme
+-- spiller advarsel på nettsida men ikke i addonet, eller omvendt.
+--
+-- Tallet er IKKE kast per fight. Det er andelen av knappene spilleren
+-- faktisk har: nevneren er spec-normalisert i nordavind-web/lib/defensives.ts
+-- (en Mage har én barriere, ikke tre; en Holy Priest har ingen Dispersion).
+-- 1.0 betyr «brukte alle knappene sine hver fight».
+--
+-- Merk at web sender null for tanks — filteret der teller dem ikke i det hele
+-- tatt — og da skal det ikke stå noen advarsel.
+local DEFENSIVE_WARN_BELOW = 0.8
+
 -- Sim-poeng. MÅ følge SIM_MAX_POINTS og SIM_FULL_AT_PERCENT i
 -- nordavind-web/app/api/loot/route.ts. Regelteksten gir sims 0-8, og full score
 -- ved 5 % upgrade.
@@ -177,8 +190,11 @@ function NLC.Scoring.GetWarnings(imported, playerName)
   if imported.wclParse and imported.wclParse < 25 then
     table.insert(warnings, string.format("Low parse: %d", imported.wclParse))
   end
-  if imported.defensives and imported.defensives < 0.8 then
-    table.insert(warnings, string.format("Low defensives: %.1f/fight", imported.defensives))
+  -- «/fight» var direkte feil: tallet er en andel av knappene, ikke et antall
+  -- kast. 1.5 leses som «halvannet kast» men betyr 150 % av knappene sine.
+  if imported.defensives and imported.defensives < DEFENSIVE_WARN_BELOW then
+    table.insert(warnings, string.format("Low defensives: %d%% av knappene",
+      math.floor(imported.defensives * 100 + 0.5)))
   end
   local weeklyCount = NLC.Scoring.WeeklyLootCount(imported, playerName)
   if weeklyCount > 0 then
