@@ -1,5 +1,111 @@
 # NordavindLC Changelog
 
+## 1.9.4 (2026-08-31)
+
+Tagget FOER in-game roeyktest, paa brukers valg: `RELEASE.md` punkt 5 og 6
+hoppet over bevisst, slik som ved 1.9.1 og 1.9.3. Grunnen er at council
+leder-only og reconnect ikke kan proeves uten to klienter med samme bygg —
+releasen ER maaten resten av officerne faar den paa. Koden proeves i raidet
+02.09.
+
+**Krever FULL omstart av WoW, ikke `/reload`.**
+
+### Mottakeren i handelsvinduet leses naa fire veier, og vi SPOER om secret
+
+12.0 gjorde `TradeFrameRecipientNameText:GetText()` til et secret value, og
+26.08 kastet det ni ganger midt i raid. Fiksen den gangen isolerte hvert forsoek
+i `pcall` og falt tilbake paa `UnitName("NPC")`. To hull sto igjen:
+
+- **`pcall` fanger bare det som KASTER.** Et secret value som lar seg lese, men
+  ikke sammenligne senere, slapp gjennom og ga feil mottaker — og da fjernes
+  feil gjeld hos feil person. 12.0 har `issecretvalue` nettopp for dette;
+  BugGrabber og RCLootCouncil spoer den foer de roerer verdien. Det gjoer vi naa
+  ogsaa.
+- **Begge navnekildene leser en STRENG.** Stenger spillet den ene, er sjansen
+  stor for at den andre gaar samme vei — det er tredje navne- eller
+  avstands-API som forsvinner paa like mange maaneder. Ny tredje kilde:
+  `UnitGUID("NPC")` + `GetPlayerInfoByGUID`. En GUID er en annen datatype og
+  gaar en annen vei inn.
+
+Faller alle fire (de tre over pluss `_autoAddTarget`), blir raden staaende som
+ventende — det er riktig, vi skal ikke gjette — men **naa sier addonet fra i
+chatten**. Foer var det stille, og 24.08 gikk en kveld med paa aa lete etter en
+feil som ikke fantes.
+
+### Tier telles fra AARETS sett, ikke fjoraarets
+
+`GetTierCount` leste tooltipen etter «Set:» eller «(2/5)». Forrige sesongs tier
+har noeyaktig de samme linjene — bonusen er slaatt av, men teksten staar — saa
+fjoraarets brikker ble talt som aarets. Councilet kunne da se en spiller som
+«ferdig utstyrt» selv om han manglet alt av gjeldende tier.
+
+Sett-ID-en skiller dem, og den ligger paa plass 16 i `GetItemInfo`. Det er samme
+felt nettsida filtrerer paa (`TIER_SETT_MIN`/`MAX` = 2000-2099 i
+`lib/tier-sims.ts`), og samme sjekk NorthernSkyRaidTools gjoer.
+
+**MAA oppdateres ved ny tier**, og de to tallene maa staa likt i addonet og paa
+nettsida. Staar de ulikt, teller de to tier forskjellig — og da rangerer de
+samme spiller ulikt, akkurat som i august.
+
+### Sesjonen kan hentes tilbake etter en reload
+
+Reloadet en raider midt i en innsamling, laa sesjonen kun i minnet og var borte
+for godt. Popupen kom ikke tilbake, han svarte aldri, og offiseren maatte vente
+ut hele timeren paa et svar som ikke kunne komme. Dette var den siste kjente
+maaten aa falle ut av et council paa.
+
+Klienten spoer naa `SESSION_RESUME_REQ` i det den aktiveres — noeyaktig det
+oeyeblikket en gjeninnlastet klient melder seg igjen, saa det fyrer én gang og
+ikke i loekke. Lederen svarer med `SESSION_RESUME`, og:
+
+- **kun lederen svarer**, samme regel som `SESSION_START`. Ellers kunne en
+  officer med hengende tilstand dyttet en gammel sesjon inn hos en som nettopp
+  reloadet.
+- **svaret hviskes** til den ene som spurte. Kringkastet ville det revet opp
+  igjen popupen hos alle som allerede hadde svart.
+- **er ingen innsamling aapen, er lederen stille.** Uten det ville hver eneste
+  reload i raidet utloest en runde meldinger.
+- **tida som er IGJEN foelger med**, ikke hele runden om igjen.
+
+Meldingskoeen under comms-restriksjon husker naa kanal og mottaker. Uten det
+ville en hvisket melding som ble liggende gaatt ut til HELE raidet naar
+restriksjonen slapp.
+
+### Flere items i samme handel
+
+Trade-knappen tar hele gjelda til én person, ikke bare raden du trykket paa.
+Sortert kortest handelstid foerst; taket er 6, siden siste trade-slot ikke
+byttes.
+
+Fella som ble tettet: et item som ligger i handelsvinduet staar fortsatt i
+bag-sloten sin for API-et. `FindItemInBags` tar derfor imot brukte slots og
+hopper over dem — uten det ville to eksemplarer av samme item lagt ETT item inn
+to steder.
+
+### Council krever officer OG raidlead
+
+`StartMultiSession` krever naa baade `NLC.ErEkteOfficer()` og
+`NLC.IsLootLeader()`. Ny `ErEkteOfficer()` er officer **uten**
+gruppeleder-snarveien: `isOfficer` alene duger ikke, siden `Core.lua` gir
+gruppelederen officer-tilgang, saa en raider med midlertidig lead kunne startet
+councilet.
+
+`SESSION_START` og `SESSION_CLOSE` godtas ogsaa kun fra lederen — samme felle
+som `ACTIVATE` hadde til 26.08.
+
+Merk: `rankIndex` fra `GetGuildInfo` er 0-basert. 0 = GM, 1 og 2 = de to rangene
+som begge heter «Officer», 3 = Officer Alt. Blir en ekte officer nektet, sjekk
+den linja foerst.
+
+### Avstandsmaaling er fjernet helt
+
+`UnitInRange` er borte begge steder. Det er tredje avstands-API som stenges for
+addons — `CheckInteractDistance` er protected, `UnitInRange` gir secret value —
+og `trade_harness` har naa en test som leser KILDEN og nekter begge navnene.
+Grunnen: ingen stub skrevet i Lua kan etterligne et secret value, saa en
+oppfoerselstest kan aldri fange feilen.
+
+
 ## 1.9.3 (2026-08-26)
 
 ### /nordlc testloot etterlot et flagg som blokkerte lederens ACTIVATE
