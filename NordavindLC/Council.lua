@@ -59,6 +59,12 @@ local currentWizardIndex = 0 -- which item officer is viewing in wizard
 local respondents = {}       -- set of player names who have responded
 local raidAddonUsers = 0     -- count of addon users in raid (for auto-close)
 local collectingTimer = nil  -- C_Timer ticker reference
+-- Gjenstaaende sekunder av innsamlingen, speilet ut av tickeren.
+--
+-- Ligger her og ikke bare inne i tickeren fordi den som reloader midt i et
+-- council skal faa den tida som ER igjen, ikke hele runden om igjen. Faar han
+-- 90 nye sekunder, svarer han lenge etter at offiseren har stengt og rangert.
+local _collectingRemaining = 0
 local _rollCallAcks = {}     -- tracks addon users who responded to roll call
 local _rollCallVersions = {} -- name → addon version, fra samme ack
 local _rollCallComplete = false -- true after 3s roll call window
@@ -71,8 +77,21 @@ local _collectingClosed = false -- guard against double CloseCollecting
 local _vote = { active = false, sessionIdx = nil, ballot = {}, results = {}, officers = {} }
 
 function NLC.Council.StartMultiSession(items, boss)
-  if not NLC.isOfficer then
-    NLC.Utils.Print("Only officers can start council.")
+  -- Officer OG raidleder. Begge deler, med vilje.
+  --
+  -- `isOfficer` alene holder ikke: den er sann for hvem som helst som er
+  -- gruppeleder in-game, saa en raider med midlertidig lead kunne startet
+  -- councilet. `IsLootLeader` alene holder heller ikke — da kunne en officer
+  -- uten lead gjort det, og 26.08 drev det interesse-popupen hos alle 27.
+  --
+  -- Testmodus gaar klar: IsLootLeader er sann der, og ErEkteOfficer er
+  -- uavhengig av gruppe, saa /nordlc test virker som foer for en officer.
+  if not NLC.ErEkteOfficer() then
+    NLC.Utils.Print("Kun officers kan starte council.")
+    return
+  end
+  if not NLC.IsLootLeader() then
+    NLC.Utils.Print("Kun raidlederen kan starte council — be lederen ta det.")
     return
   end
 
@@ -156,8 +175,10 @@ function NLC.Council.StartMultiSession(items, boss)
   NLC.UI.ShowMultiItemPopup(activeSessions, NLC.db.config.timer or 90)
 
   local remaining = NLC.db.config.timer or 90
+  _collectingRemaining = remaining
   collectingTimer = C_Timer.NewTicker(1, function(ticker)
     remaining = remaining - 1
+    _collectingRemaining = remaining
     if remaining <= 0 then
       ticker:Cancel()
       collectingTimer = nil
@@ -585,6 +606,41 @@ end
 
 function NLC.Council.GetActiveSessions()
   return activeSessions
+end
+
+-- Paagaar det en innsamling akkurat naa?
+--
+-- Brukes av SESSION_RESUME_REQ: er svaret nei, skal lederen tie. En som
+-- reloader etter stenging skal ikke faa opp en popup for noe som allerede er
+-- rangert og delt ut.
+function NLC.Council.HasOpenCollecting()
+  return #activeSessions > 0 and not _collectingClosed
+end
+
+-- Sesjonen pakket noeyaktig slik OnMultiSessionStart leser den.
+--
+-- Felt-for-felt lik SendMultiSession med vilje: den som reloadet skal gjennom
+-- den samme mottakerkoden som alle andre, ikke en egen vei som kan komme i
+-- utakt uten at noen merker det foer midt i et raid.
+function NLC.Council.CollectingSnapshot()
+  if not NLC.Council.HasOpenCollecting() then return nil end
+  local items = {}
+  for _, s in ipairs(activeSessions) do
+    table.insert(items, {
+      sessionIdx = s.sessionIdx,
+      itemLink = s.itemLink,
+      itemId = s.itemId,
+      ilvl = s.ilvl,
+      equipLoc = s.equipLoc,
+      armorType = s.armorType,
+      boss = s.boss,
+    })
+  end
+  -- Et vindu paa null gjoer popupen ubrukelig i det den dukker opp. Kommer
+  -- svaret likevel for sent, lukker SESSION_CLOSE den uansett.
+  local igjen = _collectingRemaining
+  if igjen < 5 then igjen = 5 end
+  return { items = items, timer = igjen }
 end
 
 -- Test-søm: lar /nordlc test registrere sine fiktive sessions som aktive, slik

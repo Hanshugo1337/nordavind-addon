@@ -33,9 +33,16 @@ bit = { bxor = function(a, b) return a ~ b end }
 local sendt = {}
 local popupVist = 0
 
+-- Hvem klienten er styres per scenario, saa leder-porten kan proeves.
+-- Standard: en ekte officer som ogsaa har lead — den lovlige kombinasjonen.
+_G.ER_EKTE_OFFICER = true
+_G.ER_LOOT_LEADER = true
+
 NordavindLC_NS = {
   active = true,
   isOfficer = true,
+  ErEkteOfficer = function() return _G.ER_EKTE_OFFICER end,
+  IsLootLeader = function() return _G.ER_LOOT_LEADER end,
   db = { config = { timer = 90, officers = {} }, importData = { players = {} },
          lootHistory = {}, pendingExport = {}, pendingTrades = {}, weeklyLoot = { counts = {} } },
   pendingSessions = {},
@@ -123,4 +130,69 @@ assert(ok2, "OnMultiSessionStart kastet hos raideren: " .. tostring(feil2))
 assert(popupVist == 1, "raideren fikk ingen popup")
 print("raidersiden              : OK -> popup vist")
 
+-- --- Kun officer OG raidleder kan starte council ---
+-- To ulike hull, begge ekte:
+--   * en raider med midlertidig lead er `isOfficer` (Core.lua gir gruppelederen
+--     officer-tilgang), og kunne dratt i gang councilet for hele raidet
+--   * en officer UTEN lead drev interesse-popupen hos alle 27 den 26.08
+-- Derfor kreves begge, og porten proeves fra begge sider.
+local function proevStart()
+  popupVist = 0   -- StartMultiSession nullstiller activeSessions selv
+  NLC.Council.StartMultiSession(items, "Test Boss")
+  return popupVist
+end
+
+_G.ER_EKTE_OFFICER, _G.ER_LOOT_LEADER = false, true
+assert(proevStart() == 0, "en raider med lead fikk starte council")
+print("raider med lead          : OK -> nektet")
+
+_G.ER_EKTE_OFFICER, _G.ER_LOOT_LEADER = true, false
+assert(proevStart() == 0, "en officer uten lead fikk starte council")
+print("officer uten lead        : OK -> nektet")
+
+_G.ER_EKTE_OFFICER, _G.ER_LOOT_LEADER = true, true
+assert(proevStart() == 1, "officer med lead ble nektet — porten er for stram")
+print("officer med lead         : OK -> slipper gjennom")
+
 print("\nALLE PAASTANDER HOLDT")
+
+-- --- Gjenopptak etter reload ---
+--
+-- Sesjonen ligger kun i minnet. Reloader en raider mens innsamlingen paagaar,
+-- er popupen borte for godt: han svarer aldri, og offiseren maa vente ut hele
+-- timeren paa et svar som ikke kan komme. Det var den siste kjente maaten aa
+-- falle ut av et council paa.
+--
+-- Lederen maa derfor kunne svare paa «hva er det som paagaar?». To krav:
+-- han maa vite AT noe paagaar, og han maa kunne pakke det slik at mottakeren
+-- kan lese det med akkurat den samme funksjonen som en vanlig sesjonsstart.
+assert(NLC.Council.HasOpenCollecting(),
+       "innsamlingen paagaar, men HasOpenCollecting sier nei")
+print("aapen innsamling         : OK -> lederen vet at noe paagaar")
+
+local snap = NLC.Council.CollectingSnapshot()
+assert(snap and snap.items, "CollectingSnapshot ga ingenting")
+assert(#snap.items == 2, "snapshotet hadde " .. #snap.items .. " items, ventet 2")
+assert(snap.timer and snap.timer > 0,
+       "snapshotet manglet gjenstaaende tid (" .. tostring(snap.timer) .. ")")
+assert(snap.items[1].itemLink and snap.items[1].itemId,
+       "snapshotet manglet itemLink/itemId - mottakeren faar en tom rad")
+print("snapshot                 : OK -> 2 items og tid igjen")
+
+-- Rundturen er selve kontrakten: det lederen pakker MAA kunne leses av den
+-- samme funksjonen som tar imot en helt vanlig sesjonsstart. Ellers oppdager vi
+-- forskjellen foerst midt i et raid, hos den ene som reloadet.
+popupVist = 0
+local ok3, feil3 = pcall(NLC.Council.OnMultiSessionStart, snap.items, snap.timer, "Officer-Draenor")
+assert(ok3, "snapshotet kunne ikke leses av OnMultiSessionStart: " .. tostring(feil3))
+assert(popupVist == 1, "den som reloadet fikk ingen popup tilbake")
+assert(#NLC.Council.GetActiveSessions() == 2,
+       "gjenopptaket ga " .. #NLC.Council.GetActiveSessions() .. " sessions, ventet 2")
+print("rundtur snapshot         : OK -> popupen kom tilbake med begge items")
+
+-- Er innsamlingen stengt, skal lederen tie. En som reloader etter stenging skal
+-- ikke faa en popup for noe som allerede er rangert og delt ut.
+NLC.Council.CloseCollecting()
+assert(not NLC.Council.HasOpenCollecting(),
+       "innsamlingen er stengt, men lederen ville fortsatt svart med en popup")
+print("stengt innsamling        : OK -> lederen tier")

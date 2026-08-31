@@ -188,15 +188,30 @@ for _, e in ipairs({ "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN", "LUA_WARN
 end
 feilRamme:SetScript("OnEvent", fangFeil)
 
+--- Ekte officer — UTEN snarveien for gruppeleder.
+--
+-- `NLC.isOfficer` er sann for den som er gruppeleder in-game, uansett rank.
+-- Det er greit for det meste, men ikke for aa starte et council: gir du lead
+-- til en raider for én pull, ville han ellers kunne dratt i gang loot-councilet
+-- for hele raidet.
+--
+-- rankIndex fra GetGuildInfo er 0-basert: 0 = Guild Master, 1 og 2 = de to
+-- rangene som begge heter «Officer», 3 = Officer Alt. Derfor <= 2. Blir en
+-- ekte officer nektet, er det denne linja som skal sjekkes foerst.
+function NLC.ErEkteOfficer()
+  local name = UnitName("player")
+  for _, officer in ipairs(NLC.db.config.officers or {}) do
+    if officer == name then return true end
+  end
+  local _, _, rankIndex = GetGuildInfo("player")
+  if rankIndex and rankIndex <= 2 then return true end
+  return false
+end
+
 function NLC.CheckOfficer()
   -- Raid leader always gets officer access
   if UnitIsGroupLeader("player") then NLC.isOfficer = true; return true end
-  local name = UnitName("player")
-  for _, officer in ipairs(NLC.db.config.officers or {}) do
-    if officer == name then NLC.isOfficer = true; return true end
-  end
-  local _, _, rankIndex = GetGuildInfo("player")
-  if rankIndex and rankIndex <= 2 then NLC.isOfficer = true; return true end
+  if NLC.ErEkteOfficer() then NLC.isOfficer = true; return true end
   NLC.isOfficer = false
   return false
 end

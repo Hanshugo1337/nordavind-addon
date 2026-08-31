@@ -67,8 +67,12 @@ local function flushCommsQueue()
   if #commsQueue == 0 then return end
   local pending = commsQueue
   commsQueue = {}
-  for _, payload in ipairs(pending) do
-    NLC.Comms:SendCommMessage(PREFIX, payload, "RAID")
+  for _, k in ipairs(pending) do
+    -- Kanalen laa ikke i koeen foer gjenopptaket kom til. En hvisket melding
+    -- som blir liggende under en restriksjon ville da gaatt ut til HELE raidet
+    -- naar den slapp — og en gjenopptatt sesjon hos alle er nettopp det vi
+    -- ikke vil ha.
+    NLC.Comms:SendCommMessage(PREFIX, k.payload, k.kanal, k.mottaker)
   end
 end
 
@@ -92,14 +96,18 @@ commsRestricted = seedFromApi()
 
 function NLC.Comms.IsRestricted() return commsRestricted end
 
-function NLC.Comms.Send(msgType, data)
+-- `mottaker` satt = hvisk til én person i stedet for aa kringkaste til raidet.
+-- Brukes av gjenopptaket: den som reloadet skal faa sesjonen tilbake, mens de
+-- som allerede har svart ikke skal se popupen rive seg opp igjen.
+function NLC.Comms.Send(msgType, data, mottaker)
   if not IsInRaid() then return end
   local payload = NLC.Comms:Serialize(msgType, data)
+  local kanal = mottaker and "WHISPER" or "RAID"
   if commsRestricted then
-    table.insert(commsQueue, payload)
+    table.insert(commsQueue, { payload = payload, kanal = kanal, mottaker = mottaker })
     return
   end
-  NLC.Comms:SendCommMessage(PREFIX, payload, "RAID")
+  NLC.Comms:SendCommMessage(PREFIX, payload, kanal, mottaker)
 end
 
 function NLC.Comms.OnMessage(prefix, message, channel, sender)
@@ -125,6 +133,12 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
     if not NLC.active and fraLeder then
       NLC.Activate()
       NLC.Utils.Print("Aktivert av raidlederen.")
+      -- Reloader du midt i et council, ligger sesjonen kun i minnet og er borte.
+      -- Popupen kom aldri tilbake, du svarte aldri, og offiseren ventet paa et
+      -- svar som ikke kunne komme — hele 90-sekunderstimeren maatte loepe ut.
+      -- Aktiveringen er noeyaktig det oeyeblikket en gjeninnlastet klient melder
+      -- seg igjen, saa spoersmaalet henges her: én gang, ikke i loekke.
+      NLC.Comms.Send("SESSION_RESUME_REQ", "")
     end
     return
   end
@@ -153,7 +167,8 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
 
   -- Lederen holder paa akkurat naa: like god aktiveringsgrunn som ACTIVATE.
   if not NLC.active and fraLeder and
-     (msgType == "SESSION_START" or msgType == "ROLL_CALL" or msgType == "VERSION_CHECK") then
+     (msgType == "SESSION_START" or msgType == "SESSION_RESUME"
+      or msgType == "ROLL_CALL" or msgType == "VERSION_CHECK") then
     NLC.Activate()
     NLC.Utils.Print("Aktivert av council-oppkall.")
   end
@@ -161,6 +176,21 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
   if not NLC.active then return end
 
   if msgType == "SESSION_START" then
+    -- KUN raidlederen starter council.
+    --
+    -- Uten denne porten kunne hvilken som helst officer drive interesse-popupen
+    -- hos hele raidet — og en klient paa gammel build, eller med hengende
+    -- tilstand, gjoer det uten aa mene det. Det er nøyaktig samme felle som laa
+    -- i ACTIVATE til 26.08: meldinga het «Activated by raid leader», men
+    -- avsenderen ble aldri sjekket.
+    --
+    -- ErGruppeleder svarer nei naar den ikke vet hvem lederen er, saa
+    -- ingenting slipper gjennom foer rosteret er lest.
+    if not fraLeder then
+      NLC.Utils.Diag("SESSION_START avvist - ikke fra lederen: " .. tostring(sender))
+      return
+    end
+
     -- Skip own broadcast — the officer who started it already has state from StartMultiSession
     local myName = UnitName("player")
     local senderName = sender:match("^([^-]+)") or sender
@@ -168,6 +198,34 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
       -- do nothing, already set up
     elseif NLC.Council.OnMultiSessionStart then
       NLC.Council.OnMultiSessionStart(data.items, data.timer or 90, sender)
+    end
+
+  -- Noen ber om aa faa en paagaaende sesjon paa nytt.
+  --
+  -- Kun lederen svarer, av samme grunn som kun lederen faar starte: en officer
+  -- med hengende tilstand kunne ellers dyttet en gammel sesjon inn hos en som
+  -- nettopp reloadet. Og svaret HVISKES — kringkastet ville det revet opp igjen
+  -- popupen hos alle som allerede hadde svart.
+  --
+  -- Er ingen innsamling aapen, er stillhet riktig svar. Uten det ville hver
+  -- eneste reload i raidet utloest en runde meldinger.
+  elseif msgType == "SESSION_RESUME_REQ" then
+    if not UnitIsGroupLeader("player") then return end
+    if not (NLC.Council.HasOpenCollecting and NLC.Council.HasOpenCollecting()) then return end
+    local snapshot = NLC.Council.CollectingSnapshot and NLC.Council.CollectingSnapshot()
+    if not snapshot then return end
+    NLC.Utils.Diag("SESSION_RESUME: sender sesjonen paa nytt til " .. tostring(sender))
+    NLC.Comms.Send("SESSION_RESUME", snapshot, sender)
+
+  -- Sesjonen kommer tilbake. Samme leder-port som SESSION_START.
+  elseif msgType == "SESSION_RESUME" then
+    if not fraLeder then
+      NLC.Utils.Diag("SESSION_RESUME avvist - ikke fra lederen: " .. tostring(sender))
+      return
+    end
+    if NLC.Council.OnMultiSessionStart then
+      NLC.Council.OnMultiSessionStart(data.items, data.timer or 90, sender)
+      NLC.Utils.Print("Councilet paagaar - henter sesjonen tilbake.")
     end
 
   elseif msgType == "RESPOND" then
@@ -188,6 +246,15 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
     end
 
   elseif msgType == "SESSION_CLOSE" then
+    -- Samme port som SESSION_START. Denne baerer rangeringsdataene alle andre
+    -- faar; stoler vi ikke paa hvem som startet, kan vi ikke stole paa hvem som
+    -- lukker. Popupen lukkes heller ikke paa en fremmed melding — da kunne én
+    -- klient revet interesse-vinduet vekk for hele raidet.
+    if not fraLeder then
+      NLC.Utils.Diag("SESSION_CLOSE avvist - ikke fra lederen: " .. tostring(sender))
+      return
+    end
+
     NLC.UI.HideMultiItemPopup()
     if not NLC.isOfficer and NLC.Council.OnSessionClose then
       NLC.Council.OnSessionClose(data)

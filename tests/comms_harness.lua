@@ -34,7 +34,13 @@ LibStub = function(navn)
     Embed = function(_, maal)
       maal.Serialize = function(_, ...) return { ... } end
       maal.Deserialize = function(_, m) return true, m[1], m[2] end
-      maal.SendCommMessage = function(_, _, payload) table.insert(sendt, payload[1]) end
+      -- Kanal og mottaker maa med: en gjenopptatt sesjon skal HVISKES til den
+      -- ene som spurte, ikke kringkastes til raidet. Kringkastet ville den
+      -- revet opp igjen popupen hos alle som allerede hadde svart.
+      maal.SendCommMessage = function(_, _, payload, kanal, mottaker)
+        table.insert(sendt, { typ = payload[1], data = payload[2],
+                              kanal = kanal, mottaker = mottaker })
+      end
       maal.RegisterComm = function() end
       return maal
     end,
@@ -56,7 +62,11 @@ NordavindLC_NS = {
     -- rigg (aktivering_harness); her testes dispatchen, ikke matchen.
     ErGruppeleder = function(avsender) return avsender == _G.LEDER_NAVN end,
   },
-  Council = {}, UI = {}, LootDetection = {}, Comms = {},
+  Council = {},
+  -- SESSION_CLOSE-grenen ble aldri kjoert her foer leder-porten kom,
+  -- saa denne stubben manglet.
+  UI = { HideMultiItemPopup = function() end },
+  LootDetection = {}, Comms = {},
 }
 local NLC = NordavindLC_NS
 
@@ -78,8 +88,13 @@ local function motta(msgType, data, avsender)
 end
 
 local function harSendt(t)
-  for _, v in ipairs(sendt) do if v == t then return true end end
+  for _, v in ipairs(sendt) do if v.typ == t then return true end end
   return false
+end
+
+local function sendtSom(t)
+  for _, v in ipairs(sendt) do if v.typ == t then return v end end
+  return nil
 end
 
 -- --- 1: uaktivert klient svarer paa ROLL_CALL ---
@@ -134,4 +149,98 @@ assert(NLC.active, "ROLL_CALL fra lederen aktiverte ikke")
 assert(harSendt("ROLL_CALL_ACK"), "svarte ikke lederen")
 print("ROLL_CALL fra leder   : OK -> aktiverte og svarte")
 
+-- --- 7: SESSION_START fra en MENIG officer skal ignoreres ---
+-- Kun raidlederen starter council. Uten denne porten kunne en officer paa
+-- gammel build, eller med hengende tilstand, drive interesse-popupen hos hele
+-- raidet — samme felle som ACTIVATE hadde: meldinga het «fra raid leader»,
+-- men avsenderen ble aldri sjekket.
+NLC.active = true
+_G.__startet, _G.__lukket = 0, 0
+NLC.Council.OnMultiSessionStart = function() _G.__startet = _G.__startet + 1 end
+NLC.Council.OnSessionClose = function() _G.__lukket = _G.__lukket + 1 end
+
+motta("SESSION_START", { items = {}, timer = 90 }, "Prectus-Kazzak")
+assert(_G.__startet == 0,
+       "SESSION_START fra en ikke-leder startet councilet likevel")
+print("SESSION_START menig   : OK -> ignorert")
+
+-- --- 8: SESSION_START fra lederen skal gaa gjennom ---
+_G.__startet = 0
+motta("SESSION_START", { items = {}, timer = 90 }, _G.LEDER_NAVN)
+assert(_G.__startet == 1, "SESSION_START fra lederen naadde ikke fram")
+print("SESSION_START leder   : OK -> gaar gjennom")
+
+-- --- 9: SESSION_CLOSE foelger samme regel ---
+-- Den baerer rangeringsdataene alle andre faar. Stoler vi ikke paa hvem som
+-- startet, kan vi ikke stole paa hvem som lukker.
+_G.__lukket = 0
+motta("SESSION_CLOSE", {}, "Prectus-Kazzak")
+assert(_G.__lukket == 0, "SESSION_CLOSE fra en ikke-leder ble godtatt")
+motta("SESSION_CLOSE", {}, _G.LEDER_NAVN)
+assert(_G.__lukket == 1, "SESSION_CLOSE fra lederen naadde ikke fram")
+print("SESSION_CLOSE         : OK -> kun fra lederen")
+
 print("\nALLE PAASTANDER HOLDT")
+
+-- --- 10: en klient som nettopp er aktivert ber om sesjonen paa nytt ---
+--
+-- Reloader en raider midt i et council, ligger sesjonen kun i minnet og er
+-- borte for godt. Popupen kommer ikke tilbake, han svarer aldri, og offiseren
+-- venter paa et svar som aldri kan komme — 90-sekunderstimeren maa loepe ut.
+-- Dette var den siste kjente maaten aa falle ut av et council paa.
+--
+-- Spoersmaalet henges paa aktiveringen fordi det er noeyaktig det oeyeblikket
+-- en gjeninnlastet klient melder seg igjen. Da fyrer det én gang, ikke i loekke.
+NLC.active = false
+motta("ACTIVATE", "", _G.LEDER_NAVN)
+assert(NLC.active, "ACTIVATE fra lederen aktiverte ikke")
+assert(harSendt("SESSION_RESUME_REQ"),
+       "spurte ikke om en paagaaende sesjon etter aktivering")
+print("ber om gjenopptak     : OK -> spoer én gang ved aktivering")
+
+-- --- 11: lederen hvisker sesjonen tilbake til den som spurte ---
+NLC.active = true
+UnitIsGroupLeader = function() return true end
+NLC.Council.HasOpenCollecting = function() return true end
+NLC.Council.CollectingSnapshot = function()
+  return { items = { { sessionIdx = 1, itemLink = "|h[Ting]|h", itemId = 7 } }, timer = 42 }
+end
+
+motta("SESSION_RESUME_REQ", "", "Bobletount-Draenor")
+local svar = sendtSom("SESSION_RESUME")
+assert(svar, "lederen svarte ikke paa SESSION_RESUME_REQ")
+assert(svar.kanal == "WHISPER",
+       "sesjonen ble sendt paa " .. tostring(svar.kanal) .. ", ikke hvisket")
+assert(svar.mottaker == "Bobletount-Draenor",
+       "hvisket til " .. tostring(svar.mottaker) .. " i stedet for den som spurte")
+assert(svar.data and svar.data.timer == 42, "gjenstaaende tid fulgte ikke med")
+print("leder svarer          : OK -> hvisket til den ene, med tid igjen")
+
+-- --- 12: ingen aapen innsamling betyr stillhet ---
+-- Uten dette ville hver eneste reload i raidet utloese en runde meldinger.
+NLC.Council.HasOpenCollecting = function() return false end
+motta("SESSION_RESUME_REQ", "", "Bobletount-Draenor")
+assert(not harSendt("SESSION_RESUME"),
+       "svarte med en sesjon som ikke finnes")
+print("ingen sesjon aapen    : OK -> stille")
+
+-- --- 13: kun lederen svarer ---
+-- Samme regel som SESSION_START. Svarte enhver officer, kunne en klient med
+-- hengende tilstand dyttet en gammel sesjon inn hos en som nettopp reloadet.
+NLC.Council.HasOpenCollecting = function() return true end
+UnitIsGroupLeader = function() return false end
+motta("SESSION_RESUME_REQ", "", "Bobletount-Draenor")
+assert(not harSendt("SESSION_RESUME"), "en ikke-leder svarte med sesjonen sin")
+UnitIsGroupLeader = function() return true end
+print("kun lederen svarer    : OK")
+
+-- --- 14: den gjenopptatte sesjonen godtas kun fra lederen ---
+NLC.active = true
+_G.__startet = 0
+NLC.Council.OnMultiSessionStart = function() _G.__startet = _G.__startet + 1 end
+
+motta("SESSION_RESUME", { items = {}, timer = 42 }, "Prectus-Kazzak")
+assert(_G.__startet == 0, "SESSION_RESUME fra en ikke-leder ble godtatt")
+motta("SESSION_RESUME", { items = {}, timer = 42 }, _G.LEDER_NAVN)
+assert(_G.__startet == 1, "SESSION_RESUME fra lederen naadde ikke fram")
+print("gjenopptak fra leder  : OK -> kun fra lederen")
