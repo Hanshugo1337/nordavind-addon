@@ -293,13 +293,25 @@ tradeEventFrame:SetScript("OnEvent", function(self, event, ...)
         local link = GetTradePlayerItemLink and GetTradePlayerItemLink(i)
         if link then table.insert(itemsInTrade, link) end
       end
+      NLC.Utils.Diag("TRADE_ACCEPT_UPDATE: " .. #itemsInTrade .. " item(s) i vinduet")
     end
     return
   end
 
   if event == "TRADE_SHOW" then
-    tradeTarget = lesMottaker() or NLC.Trade._autoAddTarget
+    local lest = lesMottaker()
+    tradeTarget = lest or NLC.Trade._autoAddTarget
     itemsInTrade = {}
+
+    -- Uten denne linja finnes det ingen spor av hvem addonet trodde det
+    -- handlet med. 31.08 sto ett item igjen som ventende og ett var borte
+    -- fra lista uten aa vaere levert — og bagginnholdet var eneste bevis.
+    NLC.Utils.Diag(string.format(
+      "TRADE_SHOW: mottaker=%s (kilde=%s) | pending totalt=%d, for ham=%d",
+      tostring(tradeTarget or "INGEN"),
+      lest and "handelsvindu" or (NLC.Trade._autoAddTarget and "autoAdd" or "ingen"),
+      #NLC.Trade.GetPending(),
+      tradeTarget and #NLC.Trade.PendingFor(tradeTarget) or 0))
 
     -- Ingen av de fire kildene svarte. Da BLIR raden staaende som ventende —
     -- det er riktig, vi skal ikke gjette — men offiseren maa faa vite hvorfor.
@@ -383,6 +395,7 @@ tradeEventFrame:SetScript("OnEvent", function(self, event, ...)
             if p.awardedTo == target and navn
                and p.item and p.item:find(navn, 1, true) then
               NLC.Utils.Print("Trade fullført: " .. (p.item or "?") .. " til " .. target)
+              NLC.Utils.Diag("  fjernet (match paa itemnavn): " .. tostring(p.item))
               NLC.Trade.Remove(i)
               fjernet = fjernet + 1
               break
@@ -394,18 +407,33 @@ tradeEventFrame:SetScript("OnEvent", function(self, event, ...)
       -- Fanget vi ikke innholdet (f.eks. handelen gikk uten at vi saa
       -- TRADE_ACCEPT_UPDATE), faller vi tilbake til én oppfoering — som foer.
       if fjernet == 0 then
+        -- Fallback: vi vet IKKE hvilket item som laa i vinduet, saa vi
+        -- fjerner foerste rad for personen. Er den feil, forsvinner et item
+        -- som ikke er levert — og det staar ingen andre steder enn her.
+        NLC.Utils.Diag("UI_INFO_MESSAGE: fallback-gren (itemsInTrade tom) for "
+          .. tostring(target))
         for i = #pending, 1, -1 do
           if pending[i].awardedTo == target then
             NLC.Utils.Print("Trade fullført: " .. (pending[i].item or "?") .. " til " .. target)
+            NLC.Utils.Diag("  fjernet (fallback): " .. tostring(pending[i].item))
             NLC.Trade.Remove(i)
+            fjernet = 1
             break
           end
         end
       end
 
+      NLC.Utils.Diag(string.format(
+        "TRADE fullfoert: mottaker=%s | i vinduet=%d | fjernet=%d | pending igjen=%d",
+        tostring(target), #itemsInTrade, fjernet, #NLC.Trade.GetPending()))
+
       if tradeFrame and tradeFrame:IsShown() then
         NLC.UI.ShowTradeFrame()
       end
+    end
+
+    if not target then
+      NLC.Utils.Diag("TRADE fullfoert, men INGEN mottaker kjent — ingenting fjernet")
     end
 
     NLC.Trade._autoAddItems = nil
