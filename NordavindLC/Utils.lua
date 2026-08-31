@@ -82,18 +82,45 @@ function NLC.Utils.GetEquippedInfo(equipLoc)
   return link, ilvl
 end
 
+-- Sett-ID-ene som hoerer til GJELDENDE tier.
+--
+-- MAA OPPDATERES VED NY TIER. De samme to tallene staar i nettsidas
+-- `lib/tier-sims.ts` (TIER_SETT_MIN/MAX) — staar de ulikt, teller nettsida og
+-- addonet tier forskjellig, og da rangerer de samme spiller ulikt. Det var
+-- nettopp det som skjedde i august: Mohp stod foerst paa nettsida og nest sist
+-- i addonet.
+--
+-- Maalt mot Blizzard-API-et 26.08.2026: 1931-1990 er forrige tier (ilvl
+-- 144-289), 2056-2066 er Venomous Abyss (ilvl 292-321). Klyngene er rene.
+-- Faller et sett utenfor vinduet telles det ikke — vi undervurderer heller enn
+-- aa overvurdere, siden overtelling kan nulle ut gevinsten helt (4+ gir 0).
+NLC.Utils.TIER_SETT_MIN = 2000
+NLC.Utils.TIER_SETT_MAX = 2099
+
+-- Hvor mange brikker av AARETS tier har spilleren paa seg?
+--
+-- Tellingen leste tidligere tooltipen etter «Set:» eller «(2/5)». Forrige
+-- sesongs tier har noeyaktig de samme linjene — bonusen er slaatt av, men
+-- teksten staar — saa fjoraarets brikker ble talt som aarets. Councilet fikk da
+-- se en spiller som «ferdig utstyrt» selv om han manglet alt av gjeldende tier.
+--
+-- Sett-ID-en skiller dem, og den ligger paa plass 16 i GetItemInfo. Det er
+-- samme felt nettsida filtrerer paa, og samme sjekk NorthernSkyRaidTools gjoer.
 function NLC.Utils.GetTierCount()
   local tierSlots = { 1, 3, 5, 10, 7 } -- head, shoulder, chest, hands, legs
   local count = 0
   for _, slot in ipairs(tierSlots) do
-    local tooltipData = C_TooltipInfo.GetInventoryItem("player", slot)
-    if tooltipData and tooltipData.lines then
-      for _, line in ipairs(tooltipData.lines) do
-        local text = line.leftText or ""
-        if text:find("%(%d/%d%)") or text:find("Set:") or text:find("Set Bonus") then
-          count = count + 1
-          break
-        end
+    local link = GetInventoryItemLink and GetInventoryItemLink("player", slot)
+    if link then
+      -- pcall fordi et uncachet item gir nil hele veien, og fordi 12.0 har
+      -- gjort flere item-felt om til secret values uten forvarsel.
+      local ok, settId = pcall(function()
+        return select(16, C_Item.GetItemInfo(link))
+      end)
+      if ok and type(settId) == "number"
+         and settId >= NLC.Utils.TIER_SETT_MIN
+         and settId <= NLC.Utils.TIER_SETT_MAX then
+        count = count + 1
       end
     end
   end

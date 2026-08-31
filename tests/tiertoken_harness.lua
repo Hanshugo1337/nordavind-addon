@@ -61,11 +61,16 @@ local tooltips = {
               { leftText = "Plate" } },
 }
 
+-- Sett-ID-en ligger paa plass 16 i GetItemInfo. Det er den nettsida filtrerer
+-- paa (`lib/tier-sims.ts`), og den NorthernSkyRaidTools bruker til samme sjekk.
+local settId = {}
+
 C_Item = {
   GetItemInfo = function(link)
     local d = itemInfo[link]
     if not d then return nil end
-    return d[1], d[2], d[3], d[4], d[5], d[6], d[7], d[8], d[9]
+    return d[1], d[2], d[3], d[4], d[5], d[6], d[7], d[8], d[9],
+           nil, nil, nil, nil, nil, nil, settId[link]
   end,
   GetItemInfoInstant = function(link) return 268999 end,
   DoesItemExist = function() return true end,
@@ -130,3 +135,56 @@ assert(#funnet == 2, "forventet 2 items, fikk " .. #funnet)
 print("filter                 : OK -> token + bryst med, pet ute")
 
 print("\nALLE PAASTANDER HOLDT")
+
+-- --- 3: tier telles fra GJELDENDE sett, ikke forrige ---
+--
+-- `GetTierCount` leste tooltipen etter «Set:» eller «(2/5)». Forrige sesongs
+-- tier har noeyaktig de samme linjene — bonusen er slaatt av, men teksten staar.
+-- Da talte vi fjoraarets brikker som om de var aarets, og siden gevinsten faller
+-- til null ved fire brikker kunne en spiller med ETT stykke gjeldende tier bli
+-- vist som ferdig utstyrt for councilet.
+--
+-- Sett-ID-en skiller dem. Maalt mot Blizzard-API-et 26.08.2026: 1931-1990 er
+-- forrige tier, 2056-2066 er Venomous Abyss. Nettsida bruker vinduet 2000-2099
+-- (`TIER_SETT_MIN`/`MAX` i lib/tier-sims.ts) — addonet MAA bruke det samme,
+-- ellers rangerer de to ulikt igjen.
+local HODE    = "|cffa335ee|Hitem:300001::::::::90:::::|h[Aarets hjelm]|h|r"
+local SKULDRE = "|cffa335ee|Hitem:300002::::::::90:::::|h[Aarets skuldre]|h|r"
+local BRYSTET = "|cffa335ee|Hitem:300003::::::::90:::::|h[Aarets bryst]|h|r"
+local HENDER  = "|cffa335ee|Hitem:300004::::::::90:::::|h[Fjoraarets hansker]|h|r"
+local BEINA   = "|cffa335ee|Hitem:300005::::::::90:::::|h[Vanlige bukser]|h|r"
+
+for _, l in ipairs({ HODE, SKULDRE, BRYSTET, HENDER, BEINA }) do
+  itemInfo[l] = { "Utstyr", l, 4, 300, 80, "Armor", "Plate", 1, "INVTYPE_CHEST" }
+end
+settId[HODE], settId[SKULDRE], settId[BRYSTET] = 2058, 2058, 2058  -- gjeldende
+settId[HENDER] = 1955                                              -- forrige tier
+settId[BEINA]  = nil                                               -- ikke i noe sett
+
+-- head 1, shoulder 3, chest 5, legs 7, hands 10
+local utstyr = { [1] = HODE, [3] = SKULDRE, [5] = BRYSTET, [7] = BEINA, [10] = HENDER }
+GetInventoryItemLink = function(enhet, slot)
+  if enhet ~= "player" then return nil end
+  return utstyr[slot]
+end
+
+-- Tooltip-veien den GAMLE koden gikk. Fire av fem har sett-linjer, saa den
+-- gamle tellingen gir 4 der den nye gir 3. Uten denne stubben ville testen
+-- feilet paa nil i stedet for paa selve feilen.
+C_TooltipInfo.GetInventoryItem = function(enhet, slot)
+  local link = utstyr[slot]
+  if not link or not settId[link] then return nil end
+  return { lines = { { leftText = "Sett (2/5)" }, { leftText = "Set: noe bra" } } }
+end
+
+local antall = U.GetTierCount()
+assert(antall == 3,
+       "ventet 3 brikker fra gjeldende tier, fikk " .. tostring(antall)
+       .. " (forrige tier eller sett-loese items ble talt med)")
+print("tier-telling           : OK -> 3 av aarets, fjoraarets ikke talt")
+
+-- --- 4: sett-vinduet skal ligge ett sted, og stemme med nettsida ---
+assert(U.TIER_SETT_MIN == 2000 and U.TIER_SETT_MAX == 2099,
+       "sett-vinduet stemmer ikke med lib/tier-sims.ts (2000-2099): "
+       .. tostring(U.TIER_SETT_MIN) .. "-" .. tostring(U.TIER_SETT_MAX))
+print("sett-vindu             : OK -> 2000-2099, samme som nettsida")
