@@ -52,8 +52,25 @@ jobs:
               releaseType: "release"
             }' > metadata.json
 
-          curl -s -X POST \
+          # `curl -s` uten `-f` gir exit 0 ogsaa paa HTTP 500, og et `run:`-steg
+          # ser bare exit-koden. Det slo til 01.09.2026: CurseForge svarte
+          # {"errorCode":500} etter 30 sekunder, jobben ble groenn paa 43 s, og
+          # v1.9.5 laa aldri ute. Feilen ble foerst oppdaget kvelden 02.09, da
+          # hele testplanen forutsatte at alle raiderne hadde versjonen.
+          #
+          # Fasit er derfor SVARET, ikke exit-koden: en publisert fil har en id.
+          # Sjekken maa daekke tre former for loegn - feilkode i kroppen, en
+          # HTTP-kode som ikke er 200, og et tomt svar fra et brutt kall.
+          SVAR=$(curl -s -w '\n%{http_code}' -X POST \
             "https://wow.curseforge.com/api/projects/1499638/upload-file" \
             -H "X-Api-Token: $CF_API_KEY" \
             -F "metadata=<metadata.json;type=application/json" \
-            -F "file=@NordavindLC-${{ steps.version.outputs.version }}.zip"
+            -F "file=@NordavindLC-${{ steps.version.outputs.version }}.zip")
+          KODE=$(tail -n1 <<<"$SVAR")
+          KROPP=$(sed '$d' <<<"$SVAR")
+          echo "$KROPP"
+          if [ "$KODE" != "200" ] || ! grep -qE '"id"[[:space:]]*:[[:space:]]*[0-9]+' <<<"$KROPP"; then
+            echo "::error::CurseForge avviste opplastinga (HTTP $KODE) - filen er IKKE publisert"
+            exit 1
+          fi
+          echo "CurseForge-fil publisert: $KROPP"
