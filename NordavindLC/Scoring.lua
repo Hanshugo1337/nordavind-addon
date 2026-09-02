@@ -20,7 +20,17 @@ local WEEKLY_LOOT_PENALTY = 10
 --
 -- Merk at web sender null for tanks — filteret der teller dem ikke i det hele
 -- tatt — og da skal det ikke stå noen advarsel.
-local DEFENSIVE_WARN_BELOW = 0.8
+--
+-- Senket fra 0.8 til 0.25 den 02.09.2026. 0.8 lå OVER det kodebasens egen
+-- karakterskala kaller «good» (0.5), så for 31 av 33 specer utløste advarselen
+-- på nettopp den bruken raidanalysen ga toppkarakter. Og siden tallet er en
+-- andel av knappene, krevde 0.8 at en Ret paladin fyrte fire av fem knapper
+-- hver fight — tre av dem har flere minutters cooldown. Uoppnåelig for specen,
+-- uansett hvor godt hen spilte.
+--
+-- 0.25 er «okay»-grensa i lib/defensives.ts. Advarselen peker nå ut den som
+-- ikke bruker knappene sine, ikke alle som ikke er i toppsjiktet.
+local DEFENSIVE_WARN_BELOW = 0.25
 
 -- Sim-poeng. MÅ følge SIM_MAX_POINTS og SIM_FULL_AT_PERCENT i
 -- nordavind-web/app/api/loot/route.ts. Regelteksten gir sims 0-8, og full score
