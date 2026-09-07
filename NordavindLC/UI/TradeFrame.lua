@@ -195,6 +195,16 @@ end
 local tradeTarget = nil
 local itemsInTrade = {}
 
+-- Spillet fyrer TRADE_CLOSED FOER UI_INFO_MESSAGE sier at handelen gikk
+-- igjennom. Nullstiller vi mottakeren med én gang, er den borte naar
+-- opprydningen skal skje — det var nettopp det som skjedde i 16 av 16 handler
+-- i raidet 02.09.2026. Derfor husker vi den siste lukkingen et lite oeyeblikk.
+--
+-- Vinduet er bevisst kort: husker vi for lenge, kan en senere TRADE_COMPLETE
+-- fjerne feil rad, og en rad som forsvinner herfra staar ingen andre steder.
+local sisteTarget, sisteItems, sisteLukket = nil, nil, 0
+local LUKKEMONN = 5   -- sekunder
+
 -- 12.0 gjorde mottakernavnet til et SECRET STRING.
 --
 -- TradeFrameRecipientNameText:GetText() svarer fortsatt, men verdien kan ikke
@@ -226,7 +236,9 @@ local function renskNavn(n)
   if erHemmelig(n) then return nil end
   if type(n) ~= "string" or n == "" then return nil end
   -- «Navn(*)» betyr cross-realm. Kutt merket, behold navnet.
-  n = n:gsub("%(%*%)%s*$", "")
+  -- Spillet skriver «Navn (*)» MED mellomrom foran merket. Uten %s* her ble
+  -- navnet staaende som «Navn », og sammenligningen mot awardedTo er eksakt.
+  n = n:gsub("%s*%(%*%)%s*$", "")
   return (n:match("^([^-]+)") or n)
 end
 
@@ -367,6 +379,9 @@ tradeEventFrame:SetScript("OnEvent", function(self, event, ...)
     end
 
   elseif event == "TRADE_CLOSED" then
+    sisteTarget = tradeTarget or NLC.Trade._autoAddTarget
+    sisteItems = itemsInTrade
+    sisteLukket = GetTime()
     NLC.Trade._autoAddItems = nil
     NLC.Trade._autoAddTarget = nil
     tradeTarget = nil
@@ -381,6 +396,14 @@ tradeEventFrame:SetScript("OnEvent", function(self, event, ...)
     if not fullfoert then return end
 
     local target = tradeTarget or NLC.Trade._autoAddTarget
+    if not target and sisteTarget and (GetTime() - sisteLukket) <= LUKKEMONN then
+      target = sisteTarget
+      itemsInTrade = sisteItems or {}
+      NLC.Utils.Diag("UI_INFO_MESSAGE: mottaker hentet fra lukkingen ("
+        .. tostring(target) .. ")")
+    end
+    sisteTarget, sisteItems = nil, nil
+
     if target then
       local pending = NLC.Trade.GetPending()
       local fjernet = 0

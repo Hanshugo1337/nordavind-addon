@@ -443,3 +443,87 @@ print("issecretvalue       : OK -> hemmelig verdi forkastet, neste kilde brukt")
 issecretvalue = nil
 TradeFrameRecipientNameText.GetText = ekteGetText2
 UnitName = ekteUnitName2
+
+-- --- 14: spillet lukker vinduet FOER det sier at handelen gikk igjennom ---
+--
+-- Dette er feilen diagloggen fra raidet 02.09.2026 viste: 16 av 16 fullfoerte
+-- handler endte paa «TRADE fullfoert, men INGEN mottaker kjent — ingenting
+-- fjernet», selv om TRADE_SHOW hadde lest mottakeren riktig sekunder foer.
+--
+-- Rekkefoelgen i spillet er TRADE_CLOSED -> UI_INFO_MESSAGE. TRADE_CLOSED
+-- nullstilte baade tradeTarget og _autoAddTarget, saa mottakeren var borte i
+-- det opprydningen skulle skje, og gjelda ble staaende for alltid.
+--
+-- Riggen fyrte ALDRI TRADE_CLOSED foer meldinga. Derfor har alle testene over
+-- vaert groenne mens dette har vaert oedelagt i produksjon.
+seedGjeld()
+NLC.Trade._autoAddTarget = nil
+mottakerTekst = "Braxina"
+handler(nil, "TRADE_SHOW")
+iVinduet = { LENKE("Ringen") }
+handler(nil, "TRADE_ACCEPT_UPDATE", 1, 0)
+handler(nil, "TRADE_CLOSED")
+fullfoerHandel()
+assert(gjeldFor("Braxina") == 2,
+       "gjelda ble ikke ryddet naar vinduet lukket seg foer meldinga (gjeld: "
+       .. gjeldFor("Braxina") .. " av 3)")
+print("lukket foer melding : OK -> mottakeren husket, gjelda ryddet")
+
+-- --- 15: en gammel lukking skal IKKE rydde noe ---
+--
+-- Motstykket til testen over. Husker vi mottakeren for lenge, fjerner en
+-- tilfeldig senere TRADE_COMPLETE feil rad — og en rad som forsvinner herfra
+-- staar ingen andre steder. Vinduet skal vaere sekunder, ikke minutter.
+seedGjeld()
+NLC.Trade._autoAddTarget = nil
+mottakerTekst = "Braxina"
+handler(nil, "TRADE_SHOW")
+iVinduet = { LENKE("Ringen") }
+handler(nil, "TRADE_ACCEPT_UPDATE", 1, 0)
+handler(nil, "TRADE_CLOSED")
+local ekteGetTime = GetTime
+GetTime = function() return 100030 end   -- et halvt minutt seinere
+fullfoerHandel()
+GetTime = ekteGetTime
+assert(gjeldFor("Braxina") == 3,
+       "ryddet gjeld paa en lukking som var et halvt minutt gammel (gjeld: "
+       .. gjeldFor("Braxina") .. " av 3)")
+print("foreldet lukking    : OK -> ingenting fjernet")
+
+-- --- 16: cross-realm skrives «Navn (*)» MED mellomrom ---
+--
+-- Test 5 over bruker «Braxina(*)» uten mellomrom, og har vaert groenn hele
+-- tiden. Spillet skriver mellomrom foran merket. Moensteret «%(%*%)%s*$» spiser
+-- merket og alt ETTER det, men ikke mellomrommet FORAN — saa navnet ble
+-- «Braxina » og den eksakte sammenligningen mot awardedTo bommet.
+--
+-- I loggen fra 02.09 traff dette 17 av 21 oppslag: alle med etterslepende
+-- mellomrom sto «for ham=0», mens Mohp, Leonidazar og Thunderbrave — de tre
+-- uten merke — sto «for ham=1».
+seedGjeld()
+NLC.Trade._autoAddTarget = nil
+mottakerTekst = "Braxina (*)"
+handler(nil, "TRADE_SHOW")
+iVinduet = { LENKE("Ringen") }
+handler(nil, "TRADE_ACCEPT_UPDATE", 1, 0)
+fullfoerHandel()
+assert(gjeldFor("Braxina") == 2,
+       "cross-realm med mellomrom ble ikke gjenkjent (gjeld: "
+       .. gjeldFor("Braxina") .. " av 3)")
+print("cross-realm « (*)»  : OK -> mellomrommet kuttet ogsaa")
+
+-- --- 17: kvelden slik den faktisk var ---
+-- Cross-realm-spiller, vinduet lukkes foer meldinga. Begge feilene samtidig,
+-- som i raidet 02.09. Dette er tilfellet som gjorde at fem rader sto igjen som
+-- ventende selv om itemene var levert.
+seedGjeld()
+NLC.Trade._autoAddTarget = nil
+mottakerTekst = "Braxina (*)"
+handler(nil, "TRADE_SHOW")
+iVinduet = { LENKE("Ringen") }
+handler(nil, "TRADE_ACCEPT_UPDATE", 1, 0)
+handler(nil, "TRADE_CLOSED")
+fullfoerHandel()
+assert(gjeldFor("Braxina") == 2,
+       "ekte kveld: gjelda sto igjen (gjeld: " .. gjeldFor("Braxina") .. " av 3)")
+print("ekte kveld          : OK -> cross-realm + lukket vindu, gjelda ryddet")
