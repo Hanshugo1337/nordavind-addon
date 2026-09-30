@@ -76,3 +76,21 @@ S.AddWeeklyAward("Sondi", "bis", -1)
 S.AddWeeklyAward("Sondi", "stat", 1)
 assert(NLC.db.weeklyLoot.penalty["Sondi"] == 5 and NLC.db.weeklyLoot.counts["Sondi"] == 1, "bis->stat")
 print("historikk-retting    : OK -> trekket flyttes med")
+
+-- Review C1: onsdagsresetten skal nullstille trekket, ikke bare antallet.
+NLC.db.weeklyLoot = { counts = {}, penalty = {}, resetTimestamp = 1 }
+S.AddWeeklyAward("Mohp", "bis", 1)
+S.AddWeeklyAward("Mohp", "stat", 1)
+S.ResetWeek(2)
+assert(NLC.db.weeklyLoot.resetTimestamp == 2, "tidsstempel")
+score = S.Calculate({ baseScore = 50, lootThisWeek = 0, lootPenaltyWeek = 0 }, nil, "Mohp")
+assert(score == 50, "forrige ukes loot trekker fortsatt: " .. score)
+print("onsdagsreset         : OK -> trekket nullstilles")
+
+-- Review I2: oppgradert midt i uka — gamle utdelinger finnes bare som antall.
+NLC.db.weeklyLoot = { counts = { Revo = 2 }, resetTimestamp = 1 }
+S.AddWeeklyAward("Revo", "bis", 1)
+assert(NLC.db.weeklyLoot.penalty["Revo"] == 30, "2 gamle x10 + bis 10 = 30, fikk " .. tostring(NLC.db.weeklyLoot.penalty["Revo"]))
+score = S.Calculate({ baseScore = 40, lootThisWeek = 2, lootPenaltyWeek = 20 }, nil, "Revo")
+assert(score == 30, "ny bis skal koste 10 med en gang, fikk " .. score)
+print("oppgradert midt i uka: OK -> gamle utdelinger regnes x10")

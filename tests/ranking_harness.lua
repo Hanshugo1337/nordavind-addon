@@ -245,4 +245,74 @@ NLC.Council.AwardLaterCurrent()
 assert(kunSe.phase == "ranking", "raideren kunne utsette et item")
 NLC.isOfficer = true
 print("raider kun visning   : OK -> ingen handlinger")
+-- --- Review-funn (30.09.2026) ---
+SendChatMessage = function() end
+NLC.RecordAward = function() end
+NLC.Scoring.AddWeeklyAward = NLC.Scoring.AddWeeklyAward or function() end
+NLC.UI.HideWizard = NLC.UI.HideWizard or function() end
+local fanget = {}
+local gSend = NLC.Comms.Send
+NLC.Comms.Send = function(t, data, mottaker, prio)
+  if t == "RANKING" then table.insert(fanget, { data = data, prio = prio }) end
+end
+local function sesjon(idx, interesser)
+  return { sessionIdx = idx, itemLink = "|cffa335ee|Hitem:2703" .. idx .. "::::::::90:::::|h[Ring]|h|r",
+           itemId = 270300 + idx, ilvl = 678, equipLoc = "INVTYPE_FINGER", boss = "Test", timer = 90,
+           phase = "ranking", interests = interesser }
+end
+
+-- I3: RANKING er slanket, bærer itemLink og går med BULK-prioritet.
+local sA = sesjon(1, { ["Moggin"] = { category = "major", class = "WARLOCK", equippedLink = "|cffxx|Hitem:1|h[Gammel]|h|r" } })
+NLC.Council._setActiveSessions({ sA })
+sA.ranked = NLC.Council.BuildRanking(sA)
+NLC.Council.BroadcastRanking(sA)
+assert(#fanget == 1, "ingen RANKING")
+assert(fanget[1].prio == "BULK", "RANKING skal ha BULK, fikk " .. tostring(fanget[1].prio))
+assert(fanget[1].data.itemLink == sA.itemLink, "RANKING mangler itemLink")
+local k1 = fanget[1].data.ranked[1]
+assert(k1.name == "Moggin" and k1.equippedLink == nil and k1.tiebreakRoll == nil, "RANKING er ikke slanket")
+print("RANKING-last         : OK -> slank, itemLink, BULK")
+
+-- I3: etter en utdeling sendes bare items der mottakeren er kandidat.
+fanget = {}
+local sB = sesjon(2, { ["Areniir"] = { category = "bis", class = "PRIEST" } })
+local sC = sesjon(3, { ["Moggin"] = { category = "stat", class = "WARLOCK" }, ["Areniir"] = { category = "major", class = "PRIEST" } })
+local sD = sesjon(4, { ["Shotgrogg"] = { category = "major", class = "WARRIOR" } })
+NLC.Council._setActiveSessions({ sB, sC, sD })
+for _, s in ipairs({ sB, sC, sD }) do s.ranked = NLC.Council.BuildRanking(s) end
+NLC.Council.DoAward("Areniir", nil)
+assert(#fanget == 1 and fanget[1].data.sessionIdx == 3, "skulle kun sendt item 3, sendte " .. #fanget)
+print("RANKING etter award  : OK -> kun items der mottakeren er med")
+
+-- I5: sent svar mens rangeringen er aapen naar ogsaa raidet.
+fanget = {}
+local sE = sesjon(5, {})
+NLC.Council._setActiveSessions({ sE })
+sE.ranked = NLC.Council.BuildRanking(sE)
+local gOpen = NLC.UI.IsWizardOpen
+NLC.UI.IsWizardOpen = function() return true end
+NLC.Council.OnInterestReceived("Moggin-TarrenMill", 5, "bis", 670, 0, nil, nil)
+NLC.UI.IsWizardOpen = gOpen
+assert(#fanget == 1 and fanget[1].data.ranked[1].name == "Moggin", "sent svar ble ikke sendt til raidet")
+print("sent svar            : OK -> sendes ut")
+NLC.Comms.Send = gSend
+
+-- Minor 2 (oppgradert): RANKING for et annet item med samme sessionIdx ignoreres.
+NLC.isOfficer = false
+local ny = { sessionIdx = 1, itemLink = "|cffa335ee|Hitem:999::::::::90:::::|h[Ny boss]|h|r", phase = "ranking", ranked = { { name = "Riktig" } } }
+NLC.Council.OnSessionClose({ ny })
+NLC.Council.OnRanking({ sessionIdx = 1, itemLink = "|cffa335ee|Hitem:111::::::::90:::::|h[Forrige boss]|h|r", ranked = { { name = "Feil" } } })
+assert(ny.ranked[1].name == "Riktig", "RANKING fra forrige boss overskrev nytt item")
+
+-- I4: en utdeling aapner ikke vinduet hos raidere som ikke har det oppe.
+local aapnet = 0
+local gShow = NLC.UI.ShowWizard
+NLC.UI.ShowWizard = function() aapnet = aapnet + 1 end
+local to = { sessionIdx = 2, itemLink = "x", phase = "ranking", ranked = {} }
+NLC.Council.OnSessionClose({ { sessionIdx = 1, itemLink = "y", phase = "ranking", ranked = {} }, to })
+NLC.Council.OnAward(1, "y", "Moggin", "Revohunt-TwistingNether", "bis")
+assert(aapnet == 0, "utdelingen dyttet vinduet opp hos raideren")
+NLC.UI.ShowWizard = gShow
+NLC.isOfficer = true
+print("raider i fred        : OK -> ingen tvunget vindu, riktig item")
 

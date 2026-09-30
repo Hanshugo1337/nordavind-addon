@@ -100,9 +100,23 @@ function NLC.Scoring.AddWeeklyAward(playerName, category, sign)
   local wl = NLC.db.weeklyLoot
   wl.counts = wl.counts or {}
   wl.penalty = wl.penalty or {}
+  -- Oppgradert midt i uka: utdelinger fra forrige versjon finnes bare som
+  -- antall. De kostet 10 hver den gang, og skal ikke forsvinne ved neste award.
+  if wl.penalty[playerName] == nil then
+    wl.penalty[playerName] = (wl.counts[playerName] or 0) * 10
+  end
   local p = NLC.Scoring.PenaltyFor(category).week
   wl.counts[playerName] = math.max(0, (wl.counts[playerName] or 0) + sign)
   wl.penalty[playerName] = math.max(0, (wl.penalty[playerName] or 0) + sign * p)
+end
+
+-- Onsdagsresetten. Trekket MÅ nullstilles sammen med antallet — ellers
+-- trekker forrige ukes loot hele neste uke, mens advarselen sier 0 loot.
+function NLC.Scoring.ResetWeek(timestamp)
+  NLC.db.weeklyLoot = NLC.db.weeklyLoot or {}
+  NLC.db.weeklyLoot.counts = {}
+  NLC.db.weeklyLoot.penalty = {}
+  NLC.db.weeklyLoot.resetTimestamp = timestamp
 end
 
 -- Ukestrekket nettsida allerede har regnet med. Gammel eksport uten feltet

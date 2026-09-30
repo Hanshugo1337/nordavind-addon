@@ -78,6 +78,17 @@ kjørt dem hundre ganger uten å se noe.
 
 Er BugSack stille etter alle fem? Da først går du videre.
 
+## 5b. Nye kategorier eller meldinger: officers først
+
+Når en release endrer kategorinavn eller legger til en comms-melding (som
+BiS/Major/Stat og `RANKING` 30.09.2026), må **alle som kan lede loot** —
+også stedfortredere — ha den nye versjonen før taggen går ut til raidet.
+
+En loot-leder på gammel versjon kjenner ikke `bis`/`major`/`stat`: de får
+`catOrder` 99 og sorteres **under offspec og tmog**, og det gamle
+`CountsAsLoot` gir dem ikke noe in-game-trekk. Sjekk med `/nordlc version`
+i raidet før første boss.
+
 ## 6. Regelen som ble brutt
 
 **Ingen tag før koden har kjørt i et ekte raid.**

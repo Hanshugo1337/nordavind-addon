@@ -279,6 +279,7 @@ function NLC.Council.OnInterestReceived(sender, sessionIdx, category, eqIlvl, ti
       local cur = sessions[idx]
       if cur and cur.phase == "ranking" then
         cur.ranked = NLC.Council.BuildRanking(cur)
+        NLC.Council.BroadcastRanking(cur)
         NLC.UI.ShowWizard(sessions, idx)
       end
     end)
@@ -328,7 +329,7 @@ function NLC.Council.CloseCollecting()
     table.insert(broadcastData, {
       sessionIdx = session.sessionIdx, itemLink = session.itemLink, itemId = session.itemId,
       ilvl = session.ilvl, equipLoc = session.equipLoc, armorType = session.armorType,
-      boss = session.boss, ranked = session.ranked, phase = session.phase,
+      boss = session.boss, ranked = NLC.Council.RankingForRaid(session.ranked), phase = session.phase,
     })
   end
   NLC.Comms.Send("SESSION_CLOSE", broadcastData)
@@ -533,7 +534,9 @@ function NLC.Council.DoAward(playerName, note)
   for i, s in ipairs(activeSessions) do
     if i ~= currentWizardIndex and s.phase == "ranking" then
       s.ranked = NLC.Council.BuildRanking(s)
-      NLC.Council.BroadcastRanking(s)
+      -- Kun items der mottakeren er kandidat endrer seg for raidet. Alle
+      -- andre ville vaert en full RANKING i koen for ingenting.
+      if s.interests[playerName] then NLC.Council.BroadcastRanking(s) end
     end
   end
 
@@ -836,15 +839,17 @@ function NLC.Council.OnAward(sessionIdx, itemLink, playerName, sender, category)
         break
       end
     end
-    -- Advance to next unawarded item
+    -- Advance to next unawarded item. Vinduet tegnes kun paa nytt hvis
+    -- raideren selv har det oppe — ingen skal faa det dyttet i fanget.
+    local aapent = NLC.UI.IsWizardOpen and NLC.UI.IsWizardOpen()
     for i = 1, #activeSessions do
       if activeSessions[i].phase == "ranking" then
         currentWizardIndex = i
-        NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
+        if aapent then NLC.UI.ShowWizard(activeSessions, currentWizardIndex) end
         return
       end
     end
-    NLC.UI.HideWizard()
+    if aapent then NLC.UI.HideWizard() end
   end
 end
 
@@ -861,7 +866,10 @@ end
 function NLC.Council.OnRanking(data)
   if not data or not data.sessionIdx then return end
   for i, s in ipairs(activeSessions) do
-    if s.sessionIdx == data.sessionIdx then
+    -- sessionIdx starter paa 1 for hver boss. En forsinket RANKING fra forrige
+    -- boss skal ikke overskrive lista til et nytt item med samme nummer.
+    if s.sessionIdx == data.sessionIdx
+       and (not data.itemLink or not s.itemLink or data.itemLink == s.itemLink) then
       s.ranked = data.ranked
       if i == currentWizardIndex and NLC.UI.IsWizardOpen and NLC.UI.IsWizardOpen() then
         NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
@@ -873,10 +881,32 @@ end
 
 -- Officer: send rangeringen paa nytt etter en endring. Debounce per item, saa
 -- tre raske kategoribytter blir én melding og ikke tre.
+-- Det raidet trenger for aa vise lista. equippedLink (~150 byte) og
+-- tiebreakRoll er officer-intern: med 25 kandidater var RANKING ~18 KB, og
+-- alt deler samme ChatThrottleLib-ko som AWARD og SESSION_START.
+local function RankingForRaid(ranked)
+  local ut = {}
+  for i, c in ipairs(ranked or {}) do
+    ut[i] = {
+      name = c.name, class = c.class, category = c.category, note = c.note,
+      score = c.score, roll = c.roll, breakdown = c.breakdown, warnings = c.warnings,
+      rank = c.rank, displayRank = c.displayRank, role = c.role, lootCount = c.lootCount,
+      equippedIlvl = c.equippedIlvl, tierCount = c.tierCount, ilvlDiff = c.ilvlDiff,
+    }
+  end
+  return ut
+end
+NLC.Council.RankingForRaid = RankingForRaid
+
 function NLC.Council.BroadcastRanking(session)
   if not NLC.isOfficer or not session or session.phase ~= "ranking" then return end
   NLC.Theme.Debounce("ranking-" .. tostring(session.sessionIdx), 2, function()
-    NLC.Comms.Send("RANKING", { sessionIdx = session.sessionIdx, ranked = session.ranked })
+    -- Kan ha blitt delt ut i løpet av pausen.
+    if session.phase ~= "ranking" then return end
+    NLC.Comms.Send("RANKING", {
+      sessionIdx = session.sessionIdx, itemLink = session.itemLink,
+      ranked = RankingForRaid(session.ranked),
+    }, nil, "BULK")
   end)
 end
 

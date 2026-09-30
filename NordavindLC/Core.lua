@@ -115,8 +115,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
     -- Weekly loot reset check (onsdag 07:00 lokal servertid — se funksjonen)
     local lastReset = GetLastWednesdayResetUTC()
     if NLC.db.weeklyLoot.resetTimestamp < lastReset then
-      NLC.db.weeklyLoot.counts = {}
-      NLC.db.weeklyLoot.resetTimestamp = lastReset
+      NLC.Scoring.ResetWeek(lastReset)
       NLC.Utils.Print("Ukentlig loot-teller nullstilt.")
     end
 

@@ -72,7 +72,7 @@ local function flushCommsQueue()
     -- som blir liggende under en restriksjon ville da gaatt ut til HELE raidet
     -- naar den slapp — og en gjenopptatt sesjon hos alle er nettopp det vi
     -- ikke vil ha.
-    NLC.Comms:SendCommMessage(PREFIX, k.payload, k.kanal, k.mottaker)
+    NLC.Comms:SendCommMessage(PREFIX, k.payload, k.kanal, k.mottaker, k.prio)
   end
 end
 
@@ -99,15 +99,17 @@ function NLC.Comms.IsRestricted() return commsRestricted end
 -- `mottaker` satt = hvisk til én person i stedet for aa kringkaste til raidet.
 -- Brukes av gjenopptaket: den som reloadet skal faa sesjonen tilbake, mens de
 -- som allerede har svart ikke skal se popupen rive seg opp igjen.
-function NLC.Comms.Send(msgType, data, mottaker)
+-- prio: nil (NORMAL) eller "BULK" for store meldinger som ikke skal staa
+-- foran AWARD/SESSION_START i ChatThrottleLib-koen.
+function NLC.Comms.Send(msgType, data, mottaker, prio)
   if not IsInRaid() then return end
   local payload = NLC.Comms:Serialize(msgType, data)
   local kanal = mottaker and "WHISPER" or "RAID"
   if commsRestricted then
-    table.insert(commsQueue, { payload = payload, kanal = kanal, mottaker = mottaker })
+    table.insert(commsQueue, { payload = payload, kanal = kanal, mottaker = mottaker, prio = prio })
     return
   end
-  NLC.Comms:SendCommMessage(PREFIX, payload, kanal, mottaker)
+  NLC.Comms:SendCommMessage(PREFIX, payload, kanal, mottaker, prio)
 end
 
 function NLC.Comms.OnMessage(prefix, message, channel, sender)
