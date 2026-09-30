@@ -68,3 +68,11 @@ local funnet = 0
 for _, x in ipairs(w) do if x:find("^Mangler: ") then funnet = funnet + 1 end end
 assert(funnet == 2, "to mangler-advarsler, fikk " .. funnet)
 print("mangler              : OK -> vises som advarsel")
+
+-- Retting i historikken: BiS -> Stat flytter 10 ut og 5 inn (HistoryFrame).
+NLC.db.weeklyLoot = { counts = {}, penalty = {}, resetTimestamp = 1 }
+S.AddWeeklyAward("Sondi", "bis", 1)
+S.AddWeeklyAward("Sondi", "bis", -1)
+S.AddWeeklyAward("Sondi", "stat", 1)
+assert(NLC.db.weeklyLoot.penalty["Sondi"] == 5 and NLC.db.weeklyLoot.counts["Sondi"] == 1, "bis->stat")
+print("historikk-retting    : OK -> trekket flyttes med")

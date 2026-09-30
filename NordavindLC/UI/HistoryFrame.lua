@@ -6,7 +6,7 @@ local T = NLC.Theme
 
 NLC.History = NLC.History or {}
 
-local CATEGORIES = { "upgrade", "catalyst", "offspec", "tmog" }
+local CATEGORIES = { "bis", "major", "stat", "offspec", "tmog" }
 local editPopup = nil
 local historyFrame = nil
 local HISTORY_ROW_HEIGHT = 44
@@ -59,12 +59,9 @@ local function ApplyAwardEdit(entry, newRecipient, newCategory)
   local wl = NLC.db.weeklyLoot
   if wl and wl.counts and editedAt and wl.resetTimestamp
      and editedAt >= wl.resetTimestamp then
-    if oldRecipient and NLC.Scoring.CountsAsLoot(oldCategory) then
-      wl.counts[oldRecipient] = math.max(0, (wl.counts[oldRecipient] or 0) - 1)
-    end
-    if newRecipient and NLC.Scoring.CountsAsLoot(newCategory) then
-      wl.counts[newRecipient] = (wl.counts[newRecipient] or 0) + 1
-    end
+    -- Trekket flyttes med, ikke bare antallet: BiS -> Stat er -10 og +5.
+    if oldRecipient then NLC.Scoring.AddWeeklyAward(oldRecipient, oldCategory, -1) end
+    if newRecipient then NLC.Scoring.AddWeeklyAward(newRecipient, newCategory, 1) end
   end
 
   -- Queue for companion → database sync

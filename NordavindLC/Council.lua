@@ -3,7 +3,16 @@
 
 local NLC = NordavindLC_NS
 
-local catOrder = { upgrade = 1, catalyst = 2, offspec = 3, tmog = 4 }
+-- Knappen går foran poengene (vedtatt 30.09.2026): alle BiS over alle Major.
+local catOrder = { bis = 1, major = 2, stat = 3, offspec = 4, tmog = 5 }
+
+-- Klienter på gammel versjon sender upgrade/catalyst. De skal verken havne
+-- bakerst (ukjent kategori = 99) eller forsvinne, så de regnes som Major.
+-- Officeren kan rette kategorien i historikken etterpå.
+local GAMMEL_KATEGORI = { upgrade = "major", catalyst = "major" }
+function NLC.Council.NormaliserKategori(cat)
+  return GAMMEL_KATEGORI[cat] or cat
+end
 -- Rank er et hardt skille. Verdiene kommer fra nettsiden i små bokstaver.
 --
 -- "bench" sendes for backups mens rangorden-bryteren er av: ved sesongstart
@@ -251,7 +260,7 @@ function NLC.Council.OnInterestReceived(sender, sessionIdx, category, eqIlvl, ti
   local class = NLC.Utils.ClassForPlayer(sender)
 
   session.interests[name] = {
-    category = category,
+    category = NLC.Council.NormaliserKategori(category),
     equippedIlvl = eqIlvl,
     equippedLink = (eqLink and eqLink ~= "") and eqLink or nil,
     tierCount = tierCount,
@@ -460,8 +469,10 @@ end
 
 -- Norwegian category labels for raid-facing messages.
 local CAT_NO = {
-  upgrade = "Oppgradering", offspec = "Offspec", tmog = "Transmog",
-  catalyst = "Catalyst", pass = "Pass",
+  bis = "BiS", major = "Major", stat = "Stat upgrade",
+  offspec = "Offspec", tmog = "Transmog", pass = "Pass",
+  -- Kun for aa vise gamle rader fra foer 30.09.2026.
+  upgrade = "Oppgradering", catalyst = "Catalyst",
   disenchant = "Disenchant", bank = "Guildbank", free = "Fri",
 }
 
@@ -497,11 +508,11 @@ function NLC.Council.DoAward(playerName, note)
   if not session then return end
 
   -- Find the player's interest category from ranking
-  local category = "upgrade"
+  local category = "major"
   if session.ranked then
     for _, c in ipairs(session.ranked) do
       if c.name == playerName then
-        category = c.category or "upgrade"
+        category = c.category or "major"
         break
       end
     end
@@ -511,12 +522,9 @@ function NLC.Council.DoAward(playerName, note)
   NLC.RecordAward(session.itemLink, playerName, UnitName("player"), session.boss, category, session.itemId, true, note)
   NLC.Utils.Print(session.itemLink .. " awarded to " .. playerName .. " (" .. category .. ")")
 
-  -- Track weekly loot count in SavedVariables (resets each Wednesday).
-  -- Kun straffbare kategorier telles — se NLC.Scoring.CountsAsLoot.
-  if NLC.Scoring.CountsAsLoot(category) then
-    NLC.db.weeklyLoot = NLC.db.weeklyLoot or { resetTimestamp = 0, counts = {} }
-    NLC.db.weeklyLoot.counts[playerName] = (NLC.db.weeklyLoot.counts[playerName] or 0) + 1
-  end
+  -- Ukestrekket i SavedVariables (nullstilles onsdag). Kun kategorier med
+  -- trekk teller — se NLC.Scoring.CountsAsLoot.
+  NLC.Scoring.AddWeeklyAward(playerName, category, 1)
 
   local msg = session.itemLink .. " tildelt " .. playerName .. " (" .. (CAT_NO[category] or category) .. ")"
   if note then msg = msg .. " — " .. note end

@@ -178,3 +178,32 @@ harSims["Moggin"] = nil
 simDataOk = false
 
 print("\nALLE PAASTANDER HOLDT")
+-- --- BiS/Major/Stat (30.09.2026) ---
+assert(NLC.Council.NormaliserKategori("upgrade") == "major", "gammel upgrade -> major")
+assert(NLC.Council.NormaliserKategori("catalyst") == "major", "gammel catalyst -> major")
+assert(NLC.Council.NormaliserKategori("bis") == "bis", "bis urort")
+assert(NLC.Council.NormaliserKategori("tmog") == "tmog", "tmog urort")
+
+local kat = {
+  sessionIdx = 90, itemLink = "|cffa335ee|Hitem:270300::::::::90:::::|h[Ring]|h|r", itemId = 270300, ilvl = 678,
+  equipLoc = "INVTYPE_FINGER", boss = "Test", timer = 90, phase = "ranking", interests = {
+    ["Moggin"]     = { category = "stat",    class = "WARLOCK" },
+    ["Areniir"]    = { category = "bis",     class = "PRIEST"  },
+    ["Shotgrogg"]  = { category = "major",   class = "WARRIOR" },
+    ["Bobletount"] = { category = "offspec", class = "PALADIN" },
+  },
+}
+local rk = NLC.Council.BuildRanking(kat)
+local rekke = {}
+for _, c in ipairs(rk) do table.insert(rekke, c.category) end
+assert(table.concat(rekke, ",") == "bis,major,stat,offspec", "rekkefolge: " .. table.concat(rekke, ","))
+print("bis > major > stat   : OK -> knappen gaar foran poengene")
+
+-- Gammel klient sender «upgrade»: skal havne i Major, ikke bakerst.
+kat.interests = {}
+NLC.Council._setActiveSessions({ kat })
+NLC.Council.OnInterestReceived("Moggin-TarrenMill", 90, "upgrade", 670, 0, nil, nil)
+assert(kat.interests["Moggin"] and kat.interests["Moggin"].category == "major",
+       "upgrade fra gammel klient ble ikke major")
+print("gammel klient        : OK -> upgrade blir major")
+
