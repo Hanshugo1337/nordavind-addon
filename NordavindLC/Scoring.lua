@@ -3,11 +3,23 @@
 
 local NLC = NordavindLC_NS
 
--- Straff per item en spiller har fått denne uka. MÅ følge ukesstraffen i
--- app/api/loot/route.ts (lootPenalty i nordavind-web/lib/scoring.ts) — ligger
--- de to på ulike tall, straffes samme item ulikt avhengig av om importen har
--- rukket å oppdatere seg, og rekkefølgen i raidet blir en annen enn nettsidens.
-local WEEKLY_LOOT_PENALTY = 10
+-- Trekk per item, per kategori. MÅ matche LOOT_PENALTY i
+-- nordavind-web/lib/loot-penalty.ts — står de ulikt, straffes samme item ulikt
+-- avhengig av om importen har rukket å oppdatere seg, og rekkefølgen i raidet
+-- blir en annen enn nettsidens.
+-- upgrade/catalyst er gamle rader fra før knappene ble delt (30.09.2026).
+local LOOT_PENALTY = {
+  bis      = { week = 10, season = 2 },
+  major    = { week = 7,  season = 1.5 },
+  stat     = { week = 5,  season = 1 },
+  upgrade  = { week = 10, season = 2 },
+  catalyst = { week = 10, season = 2 },
+}
+local INGEN_TREKK = { week = 0, season = 0 }
+
+function NLC.Scoring.PenaltyFor(category)
+  return (category and LOOT_PENALTY[category]) or INGEN_TREKK
+end
 
 -- Under hvor mye defensivbruk vi advarer. MÅ følge terskelen i
 -- nordavind-web/app/api/loot/route.ts — står de på ulike tall, får samme
@@ -72,14 +84,33 @@ function NLC.Scoring.SimDataOk()
   return d ~= nil and d.kilder ~= nil and d.kilder.sims == "ok"
 end
 
--- Hvilke kategorier som teller som loot. MÅ følge PENALISED i
--- nordavind-web/lib/scoring.ts og app/api/loot/route.ts. Offspec og tmog er
+-- Hvilke kategorier som teller som loot: de som har trekk. MÅ følge
+-- PENALISED_CATEGORIES i nordavind-web/lib/loot-penalty.ts. Offspec og tmog er
 -- fritatt: teller addonet dem mens nettsiden ikke gjør det, henger det et
--- spøkelses-10 på spilleren resten av uka.
-local PENALISED_CATEGORIES = { upgrade = true, catalyst = true }
-
+-- spøkelsestrekk på spilleren resten av uka.
 function NLC.Scoring.CountsAsLoot(category)
-  return PENALISED_CATEGORIES[category or "upgrade"] == true
+  return LOOT_PENALTY[category or ""] ~= nil
+end
+
+-- Én utdeling (sign = 1) eller én angret utdeling (sign = -1) denne uka.
+-- Antallet brukes ved uavgjort, trekket i poeng går i scoren.
+function NLC.Scoring.AddWeeklyAward(playerName, category, sign)
+  if not NLC.Scoring.CountsAsLoot(category) then return end
+  NLC.db.weeklyLoot = NLC.db.weeklyLoot or { resetTimestamp = 0, counts = {} }
+  local wl = NLC.db.weeklyLoot
+  wl.counts = wl.counts or {}
+  wl.penalty = wl.penalty or {}
+  local p = NLC.Scoring.PenaltyFor(category).week
+  wl.counts[playerName] = math.max(0, (wl.counts[playerName] or 0) + sign)
+  wl.penalty[playerName] = math.max(0, (wl.penalty[playerName] or 0) + sign * p)
+end
+
+-- Ukestrekket nettsida allerede har regnet med. Gammel eksport uten feltet
+-- (nettsida ikke deployet ennå) faller tilbake til den gamle formelen.
+function NLC.Scoring.ImportedWeekPenalty(imported)
+  if not imported then return 0 end
+  if type(imported.lootPenaltyWeek) == "number" then return imported.lootPenaltyWeek end
+  return (imported.lootThisWeek or 0) * 10
 end
 
 -- Items denne uka. In-game-telleren gjelder naar en reset er registrert, ellers
@@ -131,17 +162,18 @@ function NLC.Scoring.Calculate(imported, live, playerName)
     table.insert(breakdown, { label = "Base (web)", value = imported.baseScore or 0 })
 
     -- Adjust for loot awarded during the current raid session that the server hasn't
-    -- seen yet (i.e. since the last /nordlc import). weeklyLoot.counts tracks every
-    -- award made by this officer this week; if that count exceeds what the import
-    -- knew about, apply the extra weekly penalty per item now.
+    -- seen yet (i.e. since the last /nordlc import). weeklyLoot.penalty holds the
+    -- penalty points for every award made by this officer this week; whatever
+    -- exceeds what the import already counted is applied now.
+    -- Gamle SavedVariables uten `penalty` har bare antall; de regnes x10.
     local wl = NLC.db.weeklyLoot
     if playerName and wl and wl.resetTimestamp and wl.resetTimestamp > 0 then
-      local sessionLoot = (wl.counts and wl.counts[playerName]) or 0
-      local importedThisWeek = imported.lootThisWeek or 0
-      if sessionLoot > importedThisWeek then
-        local extraPenalty = (sessionLoot - importedThisWeek) * WEEKLY_LOOT_PENALTY
-        score = score - extraPenalty
-        table.insert(breakdown, { label = "Session loot", value = -extraPenalty })
+      local ingame = (wl.penalty and wl.penalty[playerName])
+        or (((wl.counts and wl.counts[playerName]) or 0) * 10)
+      local extra = ingame - NLC.Scoring.ImportedWeekPenalty(imported)
+      if extra > 0 then
+        score = score - extra
+        table.insert(breakdown, { label = "Session loot", value = -extra })
       end
     end
   else
@@ -209,6 +241,10 @@ function NLC.Scoring.GetWarnings(imported, playerName)
   local weeklyCount = NLC.Scoring.WeeklyLootCount(imported, playerName)
   if weeklyCount > 0 then
     table.insert(warnings, string.format("%d loot denne uka", weeklyCount))
+  end
+  -- Nettsida avgjør hva som mangler (lib/datamangler.ts); addonet bare viser det.
+  for _, m in ipairs(imported.mangler or {}) do
+    table.insert(warnings, "Mangler: " .. m)
   end
   if imported.rank == "trial" then
     table.insert(warnings, "Trial")
