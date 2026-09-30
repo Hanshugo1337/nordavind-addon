@@ -123,7 +123,7 @@ function NLC.UI.ShowEditPopup(entry, onSave)
     catDropdown:SetPoint("TOPLEFT", 218, -60)
     UIDropDownMenu_SetWidth(catDropdown, 110)
     editPopup.catDropdown = catDropdown
-    editPopup.selectedCategory = "upgrade"
+    editPopup.selectedCategory = "major"
 
     UIDropDownMenu_Initialize(catDropdown, function(_, _)
       for _, cat in ipairs(CATEGORIES) do
@@ -149,7 +149,7 @@ function NLC.UI.ShowEditPopup(entry, onSave)
 
   -- Pre-fill
   editPopup.recipInput:SetText(entry.awardedTo or "")
-  editPopup.selectedCategory = entry.category or "upgrade"
+  editPopup.selectedCategory = entry.category or "major"
   UIDropDownMenu_SetText(editPopup.catDropdown, editPopup.selectedCategory)
 
   -- Wire save for this invocation

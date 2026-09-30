@@ -8,12 +8,16 @@ local T = NLC.Theme
 -- TOOLTIP HELPERS
 -- ============================================================
 local CATEGORY_TIPS = {
-  upgrade  = "Du trenger dette itemet som en direkte oppgradering\nfor din main spec.",
-  catalyst = "Du vil bruke Catalyst for å gjøre dette\ntil tier-set piece.",
-  offspec  = "Du trenger dette for off spec\n(annen rolle enn main).",
-  tmog     = "Du vil ha dette itemet for transmog\n(utseende).",
-  pass     = "Du trenger ikke dette itemet.",
+  bis     = "Beste item for din spec ifølge simulationcraft.org.",
+  major   = "Stor oppgradering for main spec.",
+  stat    = "Liten oppgradering, mest stats.",
+  offspec = "Du trenger dette for off spec\n(annen rolle enn main).",
+  tmog    = "Du vil ha dette itemet for transmog\n(utseende).",
+  pass    = "Du trenger ikke dette itemet.",
 }
+
+-- Kategoriene som faar notatfelt: de tre som konkurrerer paa poeng.
+local MED_NOTAT = { bis = true, major = true, stat = true }
 
 local function AddItemTooltip(frame, itemLink)
   frame:EnableMouse(true)
@@ -99,10 +103,11 @@ local function createItemRow(parent, index, item)
 
   local available = NLC.Utils.GetAvailableCategories(item.itemLink, item.equipLoc, item.itemId)
   local allCategories = {
-    { id = "upgrade",  label = T.GOLD_LIGHT .. "Upgrade|r", width = 100 },
-    { id = "catalyst", label = "|cff9933ffCatalyst|r",      width = 90 },
-    { id = "offspec",  label = "|cff3399ffOffspec|r",       width = 85 },
-    { id = "tmog",     label = T.GOLD .. "Tmog|r",          width = 70 },
+    { id = "bis",     label = "|cffff8000BiS|r",          width = 60 },
+    { id = "major",   label = T.GOLD_LIGHT .. "Major|r",  width = 70 },
+    { id = "stat",    label = T.GREEN .. "Stat|r",        width = 60 },
+    { id = "offspec", label = "|cff3399ffOffspec|r",      width = 80 },
+    { id = "tmog",    label = T.GOLD .. "Tmog|r",         width = 60 },
   }
   local categories = {}
   for _, cat in ipairs(allCategories) do
@@ -147,7 +152,7 @@ local function createItemRow(parent, index, item)
         -- Clicking same button: deselect (back to no selection)
         rowData.selection = nil
         for _, b in pairs(rowData.buttons) do b:SetAlpha(1.0) end
-        if cat.id == "upgrade" and rowData.noteBox then
+        if MED_NOTAT[cat.id] and rowData.noteBox then
           rowData.noteBox:Hide()
         end
       else
@@ -158,7 +163,7 @@ local function createItemRow(parent, index, item)
         end
         -- Dim the pass button too
         if rowData.buttons["pass"] then rowData.buttons["pass"]:SetAlpha(0.4) end
-        if cat.id == "upgrade" and rowData.noteBox then
+        if MED_NOTAT[cat.id] and rowData.noteBox then
           rowData.noteBox:Show()
           rowData.noteBox:SetFocus()
         elseif rowData.noteBox then
@@ -183,7 +188,8 @@ local function createItemRow(parent, index, item)
   end
 
   local noteBox = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
-  noteBox:SetSize(ITEM_ROW_WIDTH - 24, 22)
+  -- Smalere enn raden: til hoeyre staar det at notatet er offentlig.
+  noteBox:SetSize(ITEM_ROW_WIDTH - 24 - 170, 22)
   noteBox:SetPoint("TOPLEFT", 12, -78)
   noteBox:SetAutoFocus(false)
   noteBox:SetMaxLetters(60)
@@ -193,6 +199,15 @@ local function createItemRow(parent, index, item)
   end)
   noteBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
   rowData.noteBox = noteBox
+
+  -- Hele raidet kan se council-vinduet siden 30.09.2026, notatet inkludert.
+  -- Raden er for lav til en linje under feltet, saa den staar ved siden av.
+  local noteHint = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  noteHint:SetPoint("LEFT", noteBox, "RIGHT", 8, 0)
+  noteHint:SetText(T.MUTED .. "Synlig for hele raidet|r")
+  noteHint:Hide()
+  noteBox:HookScript("OnShow", function() noteHint:Show() end)
+  noteBox:HookScript("OnHide", function() noteHint:Hide() end)
 
   itemRows[item.sessionIdx or index] = rowData
   return row
@@ -331,7 +346,7 @@ function NLC.UI.ShowMultiItemPopup(sessions, timer)
       if rowData and rowData.selection then
         selections[session.sessionIdx] = {
           category = rowData.selection,
-          note = rowData.selection == "upgrade" and rowData.noteText or "",
+          note = MED_NOTAT[rowData.selection] and rowData.noteText or "",
         }
       end
     end
@@ -469,7 +484,7 @@ local function refreshLootPanel(items)
     local function tildel(navn, kategori, eksporterbar)
       local itemId = item.itemId or C_Item.GetItemInfoInstant(item.itemLink)
       NLC.RecordAward(item.itemLink, navn, UnitName("player"),
-                      item.boss or "Manuelt", kategori or "upgrade", itemId,
+                      item.boss or "Manuelt", kategori or "major", itemId,
                       eksporterbar, nil)
       NLC.Utils.Print((item.itemLink or "?") .. " |cff33cc33->|r " .. navn)
       if NLC.Council.AnnounceRW then
@@ -495,7 +510,7 @@ local function refreshLootPanel(items)
         local farge = f and string.format("|cff%02x%02x%02x", f.r * 255, f.g * 255, f.b * 255)
         table.insert(valg, {
           text = m.navn, color = farge,
-          func = function() tildel(m.navn, "upgrade", true) end,
+          func = function() tildel(m.navn, "major", true) end,
         })
       end
       if #valg == 0 then

@@ -24,7 +24,7 @@ function NLC.Trade.Add(itemLink, itemId, awardedTo, awardedBy, boss, category)
     awardedTo = awardedTo,
     awardedBy = awardedBy,
     boss = boss or "Unknown",
-    category = category or "upgrade",
+    category = category or "major",
     timestamp = time(),
   })
 end

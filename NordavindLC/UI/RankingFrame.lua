@@ -27,8 +27,9 @@ local RANK_COLORS = {
 }
 
 local CATEGORY_LABELS = {
-  upgrade  = T.GREEN .. "Upgrade|r",
-  catalyst = "|cff9933ffCatalyst|r",
+  bis      = "|cffff8000BiS|r",
+  major    = T.GOLD_LIGHT .. "Major upgrade|r",
+  stat     = T.GREEN .. "Stat upgrade|r",
   offspec  = "|cff3399ffOffspec|r",
   tmog     = T.GOLD .. "Tmog|r",
 }
@@ -285,7 +286,7 @@ function NLC.UI.ShowRanking(session, candidates)
         end
         table.insert(items, { divider = true })
         table.insert(items, { title = true, text = "Bytt kategori" })
-        for _, cat in ipairs({ "upgrade", "catalyst", "offspec", "tmog" }) do
+        for _, cat in ipairs({ "bis", "major", "stat", "offspec", "tmog" }) do
           table.insert(items, { text = "   " .. cat, func = function() NLC.Council.ChangeCategory(c.name, cat) end })
         end
         table.insert(items, { divider = true })

@@ -335,7 +335,7 @@ function NLC.RecordAward(item, awardedTo, awardedBy, boss, category, itemId, exp
     awardedTo = awardedTo,
     awardedBy = awardedBy,
     boss = boss or "Unknown",
-    category = category or "upgrade",
+    category = category or "major",
     timestamp = time(),
   }
   -- Settes kun når den finnes, så eksisterende oppføringer i SavedVariables
