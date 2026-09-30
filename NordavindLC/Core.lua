@@ -413,7 +413,7 @@ SlashCmdList["NORDLC"] = function(msg)
     -- saa et soek kan aldri treffe tilfeldig skrot i baggen.
     if navn and #items == 0 then
       local soek = arg:match("^%S+%s+(.-)%s*$")
-      local GYLDIGE_KAT = { upgrade = true, catalyst = true, offspec = true, tmog = true }
+      local GYLDIGE_KAT = { bis = true, major = true, stat = true, offspec = true, tmog = true }
       -- Kategorien staar til slutt og er ikke en del av soeketeksten.
       if soek then
         local sisteOrd = soek:match("(%S+)%s*$")
@@ -446,13 +446,13 @@ SlashCmdList["NORDLC"] = function(msg)
     if not navn or #items == 0 then
       NLC.Utils.Print("Bruk: /nordlc award <spiller> <del av item-navnet>")
       NLC.Utils.Print("  eller /nordlc award <spiller> [shift-klikk items]")
-      NLC.Utils.Print("  Legg paa offspec/tmog/catalyst til slutt ved behov.")
+      NLC.Utils.Print("  Legg paa bis/major/stat/offspec/tmog til slutt (standard: major).")
       return
     end
-    -- Kategori kan henges paa til slutt: upgrade/catalyst/offspec/tmog.
-    local GYLDIGE = { upgrade = true, catalyst = true, offspec = true, tmog = true }
+    -- Kategori kan henges paa til slutt: bis/major/stat/offspec/tmog.
+    local GYLDIGE = { bis = true, major = true, stat = true, offspec = true, tmog = true }
     local siste = arg:match("(%S+)%s*$")
-    local kategori = (siste and GYLDIGE[siste:lower()]) and siste:lower() or "upgrade"
+    local kategori = (siste and GYLDIGE[siste:lower()]) and siste:lower() or "major"
 
     local boss = (NLC.LootDetection.GetCurrentBoss and NLC.LootDetection.GetCurrentBoss())
                  or "Manuelt"
@@ -673,9 +673,9 @@ SlashCmdList["NORDLC"] = function(msg)
 
     local fakeSessions = {}
     local testInterests = {
-      { name = "Testwarrior",  class = "WARRIOR",  cat = "upgrade",  tier = 3 },
-      { name = "Testshaman",   class = "SHAMAN",   cat = "upgrade",  tier = 3 },
-      { name = "Testpaladin",  class = "PALADIN",  cat = "catalyst", tier = 1 },
+      { name = "Testwarrior",  class = "WARRIOR",  cat = "bis",      tier = 3 },
+      { name = "Testshaman",   class = "SHAMAN",   cat = "major",    tier = 3 },
+      { name = "Testpaladin",  class = "PALADIN",  cat = "stat",     tier = 1 },
       { name = "Testmage",     class = "MAGE",     cat = "tmog",     tier = 1 },
       { name = "Testrogue",    class = "ROGUE",    cat = "tmog",     tier = 2 },
     }
