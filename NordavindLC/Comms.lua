@@ -260,6 +260,18 @@ function NLC.Comms.OnMessage(prefix, message, channel, sender)
       NLC.Council.OnSessionClose(data)
     end
 
+  -- Oppdatert rangering etter at officeren byttet kategori, fjernet noen,
+  -- rullet eller delte ut. Samme port som SESSION_CLOSE: den baerer det raidet
+  -- ser, saa den maa komme fra den som leder.
+  elseif msgType == "RANKING" then
+    if not fraLeder then
+      NLC.Utils.Diag("RANKING avvist - ikke fra lederen: " .. tostring(sender))
+      return
+    end
+    if not NLC.isOfficer and NLC.Council.OnRanking then
+      NLC.Council.OnRanking(data)
+    end
+
   -- ROLL_CALL og VERSION_CHECK besvares over aktiveringsporten, ikke her.
   -- Versjonen ligger i ack-en, ikke i en egen runde: uten den har offiseren
   -- ingen måte å se at noen kjører en gammel versjon som rangerer annerledes.

@@ -244,3 +244,12 @@ assert(_G.__startet == 0, "SESSION_RESUME fra en ikke-leder ble godtatt")
 motta("SESSION_RESUME", { items = {}, timer = 42 }, _G.LEDER_NAVN)
 assert(_G.__startet == 1, "SESSION_RESUME fra lederen naadde ikke fram")
 print("gjenopptak fra leder  : OK -> kun fra lederen")
+
+-- --- 11: RANKING — oppdatert rangering, samme leder-port som SESSION_CLOSE ---
+_G.__rangering = 0
+NLC.Council.OnRanking = function() _G.__rangering = _G.__rangering + 1 end
+motta("RANKING", { sessionIdx = 1, ranked = {} }, "Prectus-Kazzak")
+assert(_G.__rangering == 0, "RANKING fra en ikke-leder ble godtatt")
+motta("RANKING", { sessionIdx = 1, ranked = {} }, _G.LEDER_NAVN)
+assert(_G.__rangering == 1, "RANKING fra lederen naadde ikke fram")
+print("RANKING               : OK -> kun fra lederen")

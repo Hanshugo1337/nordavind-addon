@@ -206,4 +206,43 @@ NLC.Council.OnInterestReceived("Moggin-TarrenMill", 90, "upgrade", 670, 0, nil, 
 assert(kat.interests["Moggin"] and kat.interests["Moggin"].category == "major",
        "upgrade fra gammel klient ble ikke major")
 print("gammel klient        : OK -> upgrade blir major")
+-- --- Alle ser rangeringen (30.09.2026) ---
+-- Officer: en endring etter lukking sendes ut som RANKING.
+local sendtRanking = {}
+local gammelSend = NLC.Comms.Send
+NLC.Comms.Send = function(t, data) if t == "RANKING" then table.insert(sendtRanking, data) end end
+local vis = {
+  sessionIdx = 91, itemLink = "|cffa335ee|Hitem:270301::::::::90:::::|h[Ring]|h|r", itemId = 270301, ilvl = 678,
+  equipLoc = "INVTYPE_FINGER", boss = "Test", timer = 90, phase = "ranking", interests = {
+    ["Moggin"]  = { category = "major", class = "WARLOCK" },
+    ["Areniir"] = { category = "stat",  class = "PRIEST"  },
+  },
+}
+NLC.Council._setActiveSessions({ vis })
+vis.ranked = NLC.Council.BuildRanking(vis)
+NLC.Council.ChangeCategory("Areniir", "bis")
+assert(#sendtRanking == 1 and sendtRanking[1].sessionIdx == 91, "kategoribytte sendte ikke RANKING")
+assert(sendtRanking[1].ranked[1].name == "Areniir", "RANKING bar ikke den nye rekkefolgen")
+NLC.Comms.Send = gammelSend
+print("RANKING sendes       : OK -> etter kategoribytte")
+
+-- Raider: tar imot og bytter lista for riktig item.
+NLC.isOfficer = false
+local raiderSesjon = { sessionIdx = 91, phase = "ranking", ranked = {} }
+NLC.Council.OnSessionClose({ raiderSesjon })
+NLC.Council.OnRanking({ sessionIdx = 91, ranked = { { name = "Areniir", category = "bis" } } })
+assert(raiderSesjon.ranked[1] and raiderSesjon.ranked[1].name == "Areniir", "raideren fikk ikke oppdateringen")
+assert(NLC.Council.ReopenWizard() == true, "/nordlc council virker ikke for raidere")
+NLC.isOfficer = true
+print("RANKING mottas       : OK -> raideren ser ny rekkefolge")
+-- Raideren ser, men kan ikke hoppe over eller utsette et item.
+NLC.isOfficer = false
+local kunSe = { sessionIdx = 92, phase = "ranking", ranked = {} }
+NLC.Council.OnSessionClose({ kunSe })
+NLC.Council.SkipCurrent()
+assert(kunSe.phase == "ranking", "raideren kunne hoppe over et item")
+NLC.Council.AwardLaterCurrent()
+assert(kunSe.phase == "ranking", "raideren kunne utsette et item")
+NLC.isOfficer = true
+print("raider kun visning   : OK -> ingen handlinger")
 

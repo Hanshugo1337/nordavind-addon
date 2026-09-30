@@ -533,6 +533,7 @@ function NLC.Council.DoAward(playerName, note)
   for i, s in ipairs(activeSessions) do
     if i ~= currentWizardIndex and s.phase == "ranking" then
       s.ranked = NLC.Council.BuildRanking(s)
+      NLC.Council.BroadcastRanking(s)
     end
   end
 
@@ -594,7 +595,8 @@ function NLC.Council.ReopenWizard()
 end
 
 function NLC.Council.AwardLaterCurrent()
-  if #activeSessions == 0 then return end
+  -- Raidere ser rangeringen, men handlingene er lederens.
+  if not NLC.isOfficer or #activeSessions == 0 then return end
   local session = activeSessions[currentWizardIndex]
   if not session then return end
 
@@ -607,7 +609,7 @@ function NLC.Council.AwardLaterCurrent()
 end
 
 function NLC.Council.SkipCurrent()
-  if #activeSessions == 0 then return end
+  if not NLC.isOfficer or #activeSessions == 0 then return end
   activeSessions[currentWizardIndex].phase = "skipped"
   NLC.Council.AdvanceWizard()
 end
@@ -676,6 +678,7 @@ function NLC.Council.ChangeCategory(name, newCategory)
   if not session or not session.interests[name] then return end
   session.interests[name].category = newCategory
   session.ranked = NLC.Council.BuildRanking(session)
+  NLC.Council.BroadcastRanking(session)
   NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
 end
 
@@ -685,6 +688,7 @@ function NLC.Council.RemoveCandidate(name)
   if not session or not session.interests[name] then return end
   session.interests[name] = nil
   session.ranked = NLC.Council.BuildRanking(session)
+  NLC.Council.BroadcastRanking(session)
   NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
 end
 
@@ -847,7 +851,33 @@ end
 function NLC.Council.OnSessionClose(data)
   activeSessions = data
   currentWizardIndex = 1
-  -- Raiders don't need the wizard — they receive award announcements via chat
+  -- Alle kan se rangeringen siden 30.09.2026 — men ingen skal faa et vindu
+  -- dyttet i fanget midt i en pull. En linje i chatten, saa aapner den som vil.
+  NLC.Utils.Print("Rangeringen er klar. Skriv |cffffd100/nordlc council|r for aa se den.")
+end
+
+-- Raider: oppdatert rangering for ett item. Vinduet tegnes paa nytt kun hvis
+-- det allerede er aapent paa akkurat dette itemet.
+function NLC.Council.OnRanking(data)
+  if not data or not data.sessionIdx then return end
+  for i, s in ipairs(activeSessions) do
+    if s.sessionIdx == data.sessionIdx then
+      s.ranked = data.ranked
+      if i == currentWizardIndex and NLC.UI.IsWizardOpen and NLC.UI.IsWizardOpen() then
+        NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
+      end
+      return
+    end
+  end
+end
+
+-- Officer: send rangeringen paa nytt etter en endring. Debounce per item, saa
+-- tre raske kategoribytter blir én melding og ikke tre.
+function NLC.Council.BroadcastRanking(session)
+  if not NLC.isOfficer or not session or session.phase ~= "ranking" then return end
+  NLC.Theme.Debounce("ranking-" .. tostring(session.sessionIdx), 2, function()
+    NLC.Comms.Send("RANKING", { sessionIdx = session.sessionIdx, ranked = session.ranked })
+  end)
 end
 
 function NLC.Council.OnRollCallAck(sender, version)

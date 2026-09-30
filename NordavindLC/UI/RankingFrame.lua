@@ -523,8 +523,9 @@ function NLC.UI.ShowWizard(sessions, index)
   rankFrame.prevBtn:Show()
   rankFrame.nextBtn:Show()
 
-  -- "No interest" skip button if no candidates
-  if #ranked == 0 then
+  -- "No interest" skip button if no candidates. Kun lederen: raidere ser
+  -- rangeringen siden 30.09.2026, men skal ikke kunne hoppe over noe.
+  if #ranked == 0 and NLC.isOfficer and NLC.IsLootLeader() then
     if not rankFrame.skipBtn then
       rankFrame.skipBtn = T.CreateButton(rankFrame, 200, 40, T.MUTED .. "Ingen interesse — Hopp over|r")
       rankFrame.skipBtn:SetPoint("CENTER", 0, 0)
