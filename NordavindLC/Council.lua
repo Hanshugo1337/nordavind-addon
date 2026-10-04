@@ -341,19 +341,21 @@ end
 function NLC.Council.BuildRanking(session)
   local candidates = {}
 
+  -- Kast per kategori, lagret paa sesjonen saa de ligger fast til itemet er delt
+  -- ut. Tmog rulles alltid; offspec foerst naar lederen trykker Roll.
+  session.kast = session.kast or {}
+  session.kast.tmog = session.kast.tmog or {}
+
   for name, interest in pairs(session.interests) do
     local imported = NLC.Scoring.GetImportedScore(name)
     local live = {
       equippedIlvl = interest.equippedIlvl,
       tierCount = interest.tierCount,
-      isTier = session.armorType ~= nil or (session.equipLoc and (
-        session.equipLoc == "INVTYPE_HEAD" or
-        session.equipLoc == "INVTYPE_SHOULDER" or
-        session.equipLoc == "INVTYPE_CHEST" or
-        session.equipLoc == "INVTYPE_ROBE" or
-        session.equipLoc == "INVTYPE_HAND" or
-        session.equipLoc == "INVTYPE_LEGS"
-      )),
+      -- Kun tokens er tier. Slotsjekken som sto her regnet ALT i hode/skulder/
+      -- bryst/hansker/bukse som tier, og da byttet Calculate ut sim-poengene med
+      -- tierGain (nesten alltid 0). Raidet 23.09 mistet Spaulders, Cuirass og
+      -- Tights sim-poengene sine slik. Nettsida har dem som isTier: false.
+      isTier = session.armorType ~= nil,
     }
 
     -- Sim-prosenten for NETTOPP dette itemet. Uten den ga addonet 0 av de 8
@@ -412,10 +414,14 @@ function NLC.Council.BuildRanking(session)
 
     if not skipCandidate then
 
-    -- Tmog: random roll 0-100 (generated fresh each ranking)
+    -- Rullet kategori: kastet trekkes én gang og gjenbrukes. Foer ble tmog
+    -- trukket paa nytt ved hver ombygging, saa rekkefoelgen hoppet for hvert
+    -- nye svar. Den som svarer etter at det er rullet, faar sitt eget kast.
     local roll = nil
-    if interest.category == "tmog" then
-      roll = math.random(0, 100)
+    local kast = session.kast[interest.category]
+    if kast then
+      if not kast[name] then kast[name] = math.random(1, 100) end
+      roll = kast[name]
     end
 
     local role = imported and imported.role or "dps"
@@ -483,6 +489,42 @@ function NLC.Council.AnnounceRW(text)
   if not IsInRaid() then return end
   local chatType = (UnitIsGroupLeader("player") or UnitIsGroupAssistant("player")) and "RAID_WARNING" or "RAID"
   SendChatMessage(text, chatType)
+end
+
+-- Roll-knappen paa kategorioverskriften: addonet ruller 1-100 for alle i
+-- kategorien, saa ingen trenger aa skrive /roll selv. Kastene ligger fast;
+-- et nytt trykk trekker ikke paa nytt, det annonserer bare igjen.
+function NLC.Council.RollCategory(category)
+  if not NLC.isOfficer or not NLC.IsLootLeader() then return end
+  local session = activeSessions[currentWizardIndex]
+  if not session then return end
+
+  session.kast = session.kast or {}
+  session.kast[category] = session.kast[category] or {}
+  session.ranked = NLC.Council.BuildRanking(session)
+  NLC.Council.BroadcastRanking(session)
+
+  local rader = {}
+  for name, v in pairs(session.kast[category]) do
+    local i = session.interests[name]
+    if i and i.category == category then table.insert(rader, { name = name, roll = v }) end
+  end
+  if #rader == 0 then return end
+  table.sort(rader, function(a, b) return a.roll > b.roll end)
+
+  -- RAID_WARNING kutter paa 255 tegn, og item-lenken alene tar ~100.
+  local linje = (CAT_NO[category] or category) .. "-roll " .. (session.itemLink or "") .. ":"
+  for _, r in ipairs(rader) do
+    local ledd = " " .. r.name .. " " .. r.roll
+    if #linje + #ledd > 250 then
+      NLC.Council.AnnounceRW(linje)
+      linje = "  forts.:"
+    end
+    linje = linje .. ledd
+  end
+  NLC.Council.AnnounceRW(linje)
+
+  NLC.UI.ShowWizard(activeSessions, currentWizardIndex)
 end
 
 function NLC.Council.Award(playerName)

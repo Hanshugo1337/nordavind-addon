@@ -112,4 +112,12 @@ assert(math.abs(a - b) < 0.01, "spillets brikketall paavirket fortsatt tier-poen
 
 print("tier-gevinst fra web  : OK -> 8 ved taket, 1.68 ved 1.05 %, fallback +3")
 
+-- tierGain = 0 betyr «settet gir deg ingenting» (alle med 4+ brikker). 0 er
+-- SANT i Lua, saa addonet ga 0 poeng og hoppet over simmen. Nettsida (JS, 0 er
+-- usant) bruker sim-prosenten i stedet. 04.10 hadde 32 av 33 tierGain = 0.
+local null = poeng({ baseScore = 0, tierGain = 0 }, { isTier = true, tierCount = 5, simPct = 2.5 })
+assert(math.abs(null - 4) < 0.01, "tierGain 0 skulle falle til sim (2.5 % = 4 poeng), fikk " .. tostring(null))
+
+print("tierGain 0            : OK -> sim brukes, som nettsida")
+
 print("\nALLE PAASTANDER HOLDT")

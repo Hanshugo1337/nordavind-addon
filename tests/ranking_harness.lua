@@ -57,6 +57,7 @@ NLC.isOfficer = true
 NLC.db = { config = { timer = 90 }, importData = { players = {} }, weeklyLoot = { counts = {} } }
 
 local wishlister = {}
+sisteLive = nil           -- det BuildRanking sist sendte til Calculate
 local harSims = {}        -- navn -> false naar spilleren mangler sims
 local simDataOk = false   -- svarer paa om sim-hentingen lyktes
 NLC.Scoring = {
@@ -64,7 +65,7 @@ NLC.Scoring = {
     return { rank = "raider", role = "dps", baseScore = 40, wishlist = wishlister[navn] or {},
              hasSims = harSims[navn] }
   end,
-  Calculate = function() return 40, {} end,
+  Calculate = function(_, live) sisteLive = live; return 40, {} end,
   GetWarnings = function() return {} end,
   SeasonLootCount = function() return 0 end,
   SimPctFor = function() return nil end,
@@ -176,6 +177,88 @@ NLC.db.config.simPort = nil
 
 harSims["Moggin"] = nil
 simDataOk = false
+
+-- --- 7: vanlige items i tier-sloter er IKKE tier ---
+--
+-- Raidet 23.09: Soulslither Spaulders, Awoken Dreadfang Cuirass og Initiate's
+-- Sacrificial Tights ble regnet som tier fordi de satt i skulder/bryst/bukse.
+-- Da byttet Calculate ut sim-poengene med tierGain, som nesten alltid er 0.
+-- Nettsida regner kun tokenene som tier (isTier: false i lib/loot-tables.ts).
+local vanligBryst = {
+  sessionIdx = 4, itemLink = "|cffa335ee|Hitem:268250::::::::90:::::|h[Awoken Dreadfang Cuirass]|h|r",
+  itemId = 268250, ilvl = 671, equipLoc = "INVTYPE_CHEST",
+  interests = { Moggin = { category = "upgrade", equippedIlvl = 660, tierCount = 2, class = "WARLOCK" } },
+  phase = "ranking",
+}
+NLC.Council.BuildRanking(vanligBryst)
+assert(sisteLive and sisteLive.isTier == false,
+       "vanlig brystplagg ble regnet som tier - mister sim-poengene")
+NLC.Council.BuildRanking(token)
+assert(sisteLive and sisteLive.isTier == true, "tier-token skal fortsatt vaere tier")
+print("tier = kun tokens    : OK -> vanlig bryst er ikke tier, token er")
+
+-- --- 8: roll per kategori (offspec/tmog) ---
+--
+-- Bruker 23.09: «trykke roll på offspec, istedenfor at ALLE må /roll». Addonet
+-- trekker kastene selv, og de LIGGER FAST til itemet er delt ut. Tmog ble
+-- trukket paa nytt ved hver ombygging (hvert nytt svar), saa rekkefoelgen hoppet.
+local sendt = {}
+SendChatMessage = function(tekst) sendt[#sendt + 1] = tekst end
+UnitIsGroupAssistant = function() return false end
+NLC.IsLootLeader = function() return true end
+
+local function kandidat(liste, navn)
+  for _, c in ipairs(liste) do if c.name == navn then return c end end
+end
+
+local os = {
+  sessionIdx = 5, itemLink = "|cffa335ee|Hitem:270200::::::::90:::::|h[Ring]|h|r",
+  itemId = 270200, ilvl = 671, equipLoc = "INVTYPE_FINGER", phase = "ranking",
+  interests = {
+    Moggin  = { category = "offspec", class = "WARLOCK" },
+    Areniir = { category = "offspec", class = "PRIEST" },
+    Shotgrogg = { category = "tmog", class = "WARRIOR" },
+    Bobletount = { category = "upgrade", class = "PALADIN" },
+  },
+}
+NLC.Council._setActiveSessions({ os })
+
+local r1 = NLC.Council.BuildRanking(os)
+assert(kandidat(r1, "Moggin").roll == nil, "offspec skal ikke rulles foer knappen trykkes")
+local tmogKast = kandidat(r1, "Shotgrogg").roll
+assert(type(tmogKast) == "number", "tmog skal rulles automatisk")
+for _ = 1, 20 do
+  assert(kandidat(NLC.Council.BuildRanking(os), "Shotgrogg").roll == tmogKast,
+         "tmog-kastet ble trukket paa nytt ved ombygging")
+end
+print("tmog-kast ligger fast: OK -> samme tall etter 20 ombygginger")
+
+NLC.Council.RollCategory("offspec")
+local r2 = NLC.Council.BuildRanking(os)
+local mK, aK = kandidat(r2, "Moggin").roll, kandidat(r2, "Areniir").roll
+assert(type(mK) == "number" and type(aK) == "number", "alle i offspec skal ha fått et kast")
+assert(mK >= 1 and mK <= 100 and aK >= 1 and aK <= 100, "kastet skal vaere 1-100 som /roll")
+assert(kandidat(r2, "Bobletount").roll == nil, "upgrade skal aldri rulles")
+assert(#sendt == 1 and sendt[1]:find("Offspec") and sendt[1]:find("Moggin") and sendt[1]:find("Areniir"),
+       "resultatet skulle ut i raid-chatten: " .. tostring(sendt[1]))
+
+-- Innenfor offspec sorteres paa kastet (høyest først).
+local foerst
+for _, c in ipairs(r2) do if c.category == "offspec" then foerst = c; break end end
+assert(foerst.roll == math.max(mK, aK), "offspec er ikke sortert paa kastet")
+
+-- Nytt svar etter kastet: faar eget kast, de gamle staar.
+os.interests["Nykommer"] = { category = "offspec" }
+local r3 = NLC.Council.BuildRanking(os)
+assert(kandidat(r3, "Moggin").roll == mK and kandidat(r3, "Areniir").roll == aK,
+       "de gamle kastene ble trukket paa nytt")
+assert(type(kandidat(r3, "Nykommer").roll) == "number", "nykommer fikk ikke kast")
+
+-- Trykk igjen: ingen nye tall, bare ny annonsering.
+NLC.Council.RollCategory("offspec")
+assert(kandidat(NLC.Council.BuildRanking(os), "Moggin").roll == mK, "nytt trykk trakk paa nytt")
+assert(#sendt == 2, "nytt trykk skal annonsere igjen")
+print("offspec-roll         : OK -> rulles paa knapp, ligger fast, nye faar eget kast")
 
 print("\nALLE PAASTANDER HOLDT")
 -- --- BiS/Major/Stat (30.09.2026) ---

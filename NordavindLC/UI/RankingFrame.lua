@@ -191,6 +191,16 @@ function NLC.UI.ShowRanking(session, candidates)
       header:SetText(CATEGORY_LABELS[currentCat] or currentCat)
       header:Show()
 
+      -- Roll for hele kategorien. Addonet trekker kastene, ingen /roll trengs.
+      if (currentCat == "offspec" or currentCat == "tmog") and NLC.isOfficer and NLC.IsLootLeader() then
+        local rullet = session.kast and session.kast[currentCat] ~= nil
+        local cat = currentCat
+        local rollBtn = T.CreateButton(rankFrame.scrollChild, 110, 24, rullet and "Vis i chat" or "Roll")
+        rollBtn:SetPoint("TOPRIGHT", rankFrame.scrollChild, "TOPRIGHT", -14, -yOffset - 4)
+        rollBtn:SetScript("OnClick", function() NLC.Council.RollCategory(cat) end)
+        rollBtn:Show()
+      end
+
       local sep = rankFrame.scrollChild:CreateTexture(nil, "ARTWORK")
       sep:SetPoint("TOPLEFT", 4, -yOffset - CAT_HEADER_HEIGHT)
       sep:SetWidth(FRAME_WIDTH - 60)
@@ -293,8 +303,20 @@ function NLC.UI.ShowRanking(session, candidates)
         table.insert(items, { text = "Omfordel award…", func = function()
           local session = NLC.Council.GetActiveSessions()[NLC.Council.GetWizardIndex()]
           if not session then return end
-          local entry = { item = session.itemLink, itemId = session.itemId,
-            awardedTo = c.name, category = c.category, timestamp = time() }
+          -- Tidspunktet MÅ være utdelingens, ikke nå: ApplyAwardEdit, nettsida
+          -- og companion matcher paa det. Med time() traff ingenting, og
+          -- endringen forsvant stille (Frond -> Mohp 31.08).
+          local award
+          for i = #(NLC.db.lootHistory or {}), 1, -1 do
+            local h = NLC.db.lootHistory[i]
+            if h.item == session.itemLink and h.awardedTo == c.name then award = h; break end
+          end
+          if not award then
+            NLC.Utils.Print(c.name .. " har ikke faatt " .. (session.itemLink or "itemet") .. " ennaa, saa det er ingenting aa omfordele.")
+            return
+          end
+          local entry = { item = award.item, itemId = session.itemId,
+            awardedTo = award.awardedTo, category = award.category, timestamp = award.timestamp }
           NLC.UI.ShowEditPopup(entry, function(newRecipient, newCategory)
             NLC.History.ApplyAwardEdit(entry, newRecipient, newCategory)
           end)
@@ -351,7 +373,7 @@ function NLC.UI.ShowRanking(session, candidates)
     scoreHover:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
       if c.roll then
-        GameTooltip:AddLine("Tmog Roll", 1, 0.82, 0)
+        GameTooltip:AddLine("Roll", 1, 0.82, 0)
         GameTooltip:AddDoubleLine("Roll", tostring(c.roll), 0.6, 0.6, 0.6, 1, 1, 1)
       else
         GameTooltip:AddLine("Score Breakdown", 1, 0.82, 0)

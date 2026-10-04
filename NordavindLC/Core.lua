@@ -675,6 +675,8 @@ SlashCmdList["NORDLC"] = function(msg)
       { name = "Testwarrior",  class = "WARRIOR",  cat = "bis",      tier = 3 },
       { name = "Testshaman",   class = "SHAMAN",   cat = "major",    tier = 3 },
       { name = "Testpaladin",  class = "PALADIN",  cat = "stat",     tier = 1 },
+      { name = "Testpriest",   class = "PRIEST",   cat = "offspec",  tier = 0 },
+      { name = "Testhunter",   class = "HUNTER",   cat = "offspec",  tier = 2 },
       { name = "Testmage",     class = "MAGE",     cat = "tmog",     tier = 1 },
       { name = "Testrogue",    class = "ROGUE",    cat = "tmog",     tier = 2 },
     }

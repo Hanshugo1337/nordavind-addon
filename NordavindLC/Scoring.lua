@@ -194,7 +194,11 @@ function NLC.Scoring.Calculate(imported, live, playerName)
     table.insert(breakdown, { label = "Base (web)", value = 0 })
   end
 
-  if live and live.isTier and imported and imported.tierGain then
+  -- tierGain 0 = settet gir ingenting (4+ brikker). 0 er SANT i Lua, saa uten
+  -- `> 0` fikk alle 0 poeng og simmen ble hoppet over. Nettsida (JS) faller til
+  -- sim-prosenten — det gjoer vi ogsaa, via siste gren. (04.10: 32 av 33 hadde 0.)
+  local tierGain = imported and imported.tierGain
+  if live and live.isTier and type(tierGain) == "number" and tierGain > 0 then
     -- Tier-gevinsten fra nettsida, ikke den flate tabellen under.
     --
     -- Addonet regnet tier med `TierAdjustment` (+3 om du har 1 eller 3 brikker,
@@ -207,11 +211,11 @@ function NLC.Scoring.Calculate(imported, live, playerName)
     -- Nettsida har baade riktig spec og riktig brikketall, saa den regner det
     -- ut og sender prosenten i importen. Samme formel som der: 5 % gir full
     -- pott, taket er 8.
-    local poeng = math.min(8, imported.tierGain * (8 / 5))
+    local poeng = math.min(8, tierGain * (8 / 5))
     score = score + poeng
     table.insert(breakdown, { label = "Tier", value = math.floor(poeng * 10 + 0.5) / 10 })
 
-  elseif live and live.isTier and live.tierCount then
+  elseif live and live.isTier and tierGain == nil and live.tierCount then
     -- Fallback for gamle importer uten tierGain. Beholder den gamle
     -- oppfoerselen framfor aa gi null tier-vurdering.
     local tierAdj = NLC.Scoring.TierAdjustment(live.tierCount)
