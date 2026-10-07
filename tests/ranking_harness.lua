@@ -70,6 +70,8 @@ NLC.Scoring = {
   SeasonLootCount = function() return 0 end,
   SimPctFor = function() return nil end,
   SimDataOk = function() return simDataOk end,
+  AktivGrad = function() return nil end,
+  HasSims = function(imp) return imp ~= nil and imp.hasSims == true end,
 }
 NLC.Comms = { Send = function() end, SendMultiSession = function() end,
               SendRollCall = function() end, IsRestricted = function() return false end }

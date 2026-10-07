@@ -126,6 +126,9 @@ function NLC.Council.StartMultiSession(items, boss)
       equipLoc = item.equipLoc,
       armorType = item.armorType,
       boss = boss or item.boss or "Unknown",
+      -- Graden låses når lootet starter, så Award Later utenfor raidet
+      -- fortsatt bruker kveldens sims.
+      grad = NLC.Scoring.AktivGrad(),
       timer = NLC.db.config.timer or 90,
       interests = {},
       phase = "collecting",
@@ -214,6 +217,7 @@ function NLC.Council.OnMultiSessionStart(items, timer, sender)
       equipLoc = item.equipLoc,
       armorType = item.armorType,
       boss = item.boss or "Unknown",
+      grad = NLC.Scoring.AktivGrad(),
       timer = timer,
       interests = {},
       phase = "collecting",
@@ -360,10 +364,12 @@ function NLC.Council.BuildRanking(session)
 
     -- Sim-prosenten for NETTOPP dette itemet. Uten den ga addonet 0 av de 8
     -- vedtatte sim-poengene, og rangerte derfor annerledes enn nettsida.
-    live.simPct = NLC.Scoring.SimPctFor(imported, session.itemId)
+    -- Sims for graden raidet står i (07.10: eksporten bar kun heroic).
+    local grad = session.grad or NLC.Scoring.AktivGrad()
+    live.simPct = NLC.Scoring.SimPctFor(imported, session.itemId, grad)
 
     local score, breakdown = NLC.Scoring.Calculate(imported, live, name)
-    local warnings = NLC.Scoring.GetWarnings(imported, name)
+    local warnings = NLC.Scoring.GetWarnings(imported, name, grad)
 
     -- Tier token filter: exclude candidates whose armor type doesn't match the token
     local skipCandidate = false
@@ -395,7 +401,7 @@ function NLC.Council.BuildRanking(session)
     --
     -- Skrus paa med: /run NordavindLC_NS.db.config.simPort = true
     if not skipCandidate and NLC.db.config.simPort and imported
-       and imported.hasSims == false and NLC.Scoring.SimDataOk() then
+       and not NLC.Scoring.HasSims(imported, grad) and NLC.Scoring.SimDataOk() then
       skipCandidate = true
     end
 

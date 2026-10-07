@@ -120,4 +120,49 @@ assert(math.abs(null - 4) < 0.01, "tierGain 0 skulle falle til sim (2.5 % = 4 po
 
 print("tierGain 0            : OK -> sim brukes, som nettsida")
 
+-- --- Sims per grad: addonet velger ut fra instansen raidet står i ---
+-- 07.10: companion fikk kun heroic, og på en mythic-kveld så addonet 0 sims
+-- for alle selv om 18 hadde simmet mythic.
+local perGrad = {
+  hasSims = false, simPct = {},
+  simsPerGrad = {
+    heroic = { hasSims = false, simPct = {} },
+    mythic = { hasSims = true, simPct = { ["268263"] = 4.2 } },
+  },
+}
+assert(NLC.Scoring.SimPctFor(perGrad, 268263, "mythic") == 4.2, "mythic-sim skal velges paa mythic")
+assert(NLC.Scoring.SimPctFor(perGrad, 268263, "heroic") == nil, "heroic har ingen sim")
+assert(NLC.Scoring.HasSims(perGrad, "mythic") == true, "har mythic-sims")
+assert(NLC.Scoring.HasSims(perGrad, "heroic") == false, "mangler heroic-sims")
+-- Ukjent grad (utenfor raid) eller gammel import uten simsPerGrad: toppfeltene.
+assert(NLC.Scoring.HasSims(perGrad, nil) == false, "uten grad brukes toppfeltet")
+assert(NLC.Scoring.SimPctFor(medTall, 268263, "mythic") == 3.1, "gammel import faller tilbake")
+assert(NLC.Scoring.HasSims({ hasSims = true }, "mythic") == true, "gammel import faller tilbake")
+
+-- Gradvalget fra GetInstanceInfo: 14/15/16 = normal/heroic/mythic, kun i raid.
+local inst = { "Raid", "raid", 16 }
+GetInstanceInfo = function() return inst[1], inst[2], inst[3] end
+assert(NLC.Scoring.AktivGrad() == "mythic", "16 = mythic")
+inst = { "Raid", "raid", 15 }
+assert(NLC.Scoring.AktivGrad() == "heroic", "15 = heroic")
+inst = { "Raid", "raid", 17 }
+assert(NLC.Scoring.AktivGrad() == nil, "LFR gir ingen grad")
+inst = { "Dorn", "none", 0 }
+assert(NLC.Scoring.AktivGrad() == nil, "utenfor raid gir ingen grad")
+GetInstanceInfo = nil
+assert(NLC.Scoring.AktivGrad() == nil, "uten API gir ingen grad")
+
+-- Varselet «ingen sim (Heroic)» fra nettsida gjelder kun heroic. Paa mythic
+-- erstattes det med addonets egen sjekk for graden.
+local w = NLC.Scoring.GetWarnings({ rank = "raider", mangler = { "ingen parse", "ingen sim (Heroic)" },
+  simsPerGrad = perGrad.simsPerGrad }, "Testperson", "mythic")
+local tekst = table.concat(w, "|")
+assert(not tekst:find("ingen sim"), "mythic-sim finnes, varselet skal bort: " .. tekst)
+assert(tekst:find("ingen parse"), "andre mangler skal staa: " .. tekst)
+w = NLC.Scoring.GetWarnings({ rank = "raider", mangler = { "ingen sim (Heroic)" },
+  simsPerGrad = { mythic = { hasSims = false, simPct = {} } } }, "Testperson", "mythic")
+assert(table.concat(w, "|"):find("ingen sim %(Mythic%)"), "manglende mythic-sim skal vises")
+
+print("sims per grad         : OK -> grad fra instansen, fallback til toppfeltene")
+
 print("\nALLE PAASTANDER HOLDT")

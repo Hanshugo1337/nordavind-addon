@@ -66,14 +66,43 @@ function NLC.Scoring.SimPoints(pct)
   return p
 end
 
+-- Raid-gradene WoW bruker i GetInstanceInfo. LFR (17) og alt annet gir nil.
+local GRAD_FRA_ID = { [14] = "normal", [15] = "heroic", [16] = "mythic" }
+
+--- Graden raidet står i nå, som nettsida kaller den: "normal"/"heroic"/"mythic".
+--- Nil utenfor raid. Da brukes standardgraden eksporten ble hentet for.
+function NLC.Scoring.AktivGrad()
+  if type(GetInstanceInfo) ~= "function" then return nil end
+  local _, instanceType, difficultyID = GetInstanceInfo()
+  if instanceType ~= "raid" then return nil end
+  return GRAD_FRA_ID[difficultyID]
+end
+
+-- Sim-feltene for én grad. Eksporten bærer `simsPerGrad` fra 07.10; før det
+-- fikk addonet kun heroic, og en mythic-kveld så 0 sims for alle. Mangler
+-- graden (utenfor raid, gammel import), brukes toppfeltene som før.
+local function simsFor(imported, grad)
+  local pg = grad and type(imported.simsPerGrad) == "table" and imported.simsPerGrad[grad]
+  if type(pg) == "table" then return pg end
+  return imported
+end
+
+--- Har spilleren sims for graden?
+function NLC.Scoring.HasSims(imported, grad)
+  if not imported then return false end
+  return simsFor(imported, grad).hasSims == true
+end
+
 --- Sim-prosenten spilleren har for ett item.
 ---
 --- Nøklene kommer fra JSON via companion, og der blir tall til STRENGER. Vi slår
 --- derfor opp begge veier — ellers finner vi aldri noe, uten å feile synlig.
-function NLC.Scoring.SimPctFor(imported, itemId)
-  if not imported or not imported.simPct or not itemId then return nil end
-  local v = imported.simPct[itemId]
-  if v == nil then v = imported.simPct[tostring(itemId)] end
+function NLC.Scoring.SimPctFor(imported, itemId, grad)
+  if not imported or not itemId then return nil end
+  local simPct = simsFor(imported, grad).simPct
+  if not simPct then return nil end
+  local v = simPct[itemId]
+  if v == nil then v = simPct[tostring(itemId)] end
   return type(v) == "number" and v or nil
 end
 
@@ -235,7 +264,7 @@ function NLC.Scoring.Calculate(imported, live, playerName)
   return score, breakdown
 end
 
-function NLC.Scoring.GetWarnings(imported, playerName)
+function NLC.Scoring.GetWarnings(imported, playerName, grad)
   local warnings = {}
   if not imported then
     table.insert(warnings, "No web data")
@@ -261,8 +290,17 @@ function NLC.Scoring.GetWarnings(imported, playerName)
     table.insert(warnings, string.format("%d loot denne uka", weeklyCount))
   end
   -- Nettsida avgjør hva som mangler (lib/datamangler.ts); addonet bare viser det.
+  -- Unntak: «ingen sim (Heroic)» gjelder graden eksporten ble hentet for. Står
+  -- raidet i en annen grad og importen har den, sjekker addonet selv.
+  local egenSimSjekk = grad and type(imported.simsPerGrad) == "table"
+    and type(imported.simsPerGrad[grad]) == "table"
   for _, m in ipairs(imported.mangler or {}) do
-    table.insert(warnings, "Mangler: " .. m)
+    if not (egenSimSjekk and m:find("^ingen sim")) then
+      table.insert(warnings, "Mangler: " .. m)
+    end
+  end
+  if egenSimSjekk and not NLC.Scoring.HasSims(imported, grad) then
+    table.insert(warnings, "Mangler: ingen sim (" .. grad:sub(1, 1):upper() .. grad:sub(2) .. ")")
   end
   if imported.rank == "trial" then
     table.insert(warnings, "Trial")

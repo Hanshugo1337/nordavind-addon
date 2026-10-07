@@ -69,7 +69,7 @@ NordavindLC_NS = {
     IsWizardOpen = function() return false end,
   },
   Theme = { Debounce = function(_, _, fn) fn() end },
-  Scoring = { Calculate = function() return 0, {} end },
+  Scoring = { Calculate = function() return 0, {} end, AktivGrad = function() return nil end },
   LootDetection = { GetCurrentBoss = function() return "Testboss" end },
   Trade = { Add = function() end },
   -- Utils.lua oppretter normalt namespacene; her stubber vi dem selv.
