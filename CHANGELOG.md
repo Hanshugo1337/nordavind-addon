@@ -1,5 +1,11 @@
 # NordavindLC Changelog
 
+## 1.9.9 (2026-10-14)
+
+**Interface oppdatert til 120105** (Midnight 12.1.5, bygg 70391). Med det gamle
+nummeret (120100) merker klienten addonet «Out of date» og laster det ikke.
+Ingen kodeendring utover `.toc`.
+
 ## 1.9.5 (2026-09-01)
 
 To endringer, ingen av dem roerer hvordan addonet oppfoerer seg i et raid.
