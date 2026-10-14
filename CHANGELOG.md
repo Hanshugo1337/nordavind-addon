@@ -1,5 +1,10 @@
 # NordavindLC Changelog
 
+## 1.10.0 (2026-10-14)
+
+Samme kode som 1.9.10, med nytt versjonsnummer. «1.9.10» sorteres som tekst
+under «1.9.9», så oppdateringen dukket ikke opp for alle.
+
 ## 1.9.10 (2026-10-14)
 
 **Knappene forsvant i 12.1.5.** Patchen fjernet de gamle globalene
