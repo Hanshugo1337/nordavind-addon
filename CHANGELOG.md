@@ -1,5 +1,13 @@
 # NordavindLC Changelog
 
+## 1.9.10 (2026-10-14)
+
+**Knappene forsvant i 12.1.5.** Patchen fjernet de gamle globalene
+`GetDetailedItemLevelInfo` og `IsEquippableItem`. `GetEquippedInfo` kastet
+«attempt to call a nil value» (Utils.lua:68) på hver rad, så verken
+loot-panelet eller raidernes popup fikk tegnet knapper. Bruker nå
+`C_Item.GetDetailedItemLevelInfo` og `C_Item.IsEquippableItem`.
+
 ## 1.9.9 (2026-10-14)
 
 **Interface oppdatert til 120105** (Midnight 12.1.5, bygg 70391). Med det gamle

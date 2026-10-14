@@ -65,11 +65,11 @@ function NLC.Utils.GetEquippedInfo(equipLoc)
   end
 
   local link = GetInventoryItemLink("player", slotId)
-  local ilvl = link and (GetDetailedItemLevelInfo(link) or 0) or 0
+  local ilvl = link and (C_Item.GetDetailedItemLevelInfo(link) or 0) or 0
 
   if altSlot then
     local link2 = GetInventoryItemLink("player", altSlot)
-    local ilvl2 = link2 and (GetDetailedItemLevelInfo(link2) or 0) or 0
+    local ilvl2 = link2 and (C_Item.GetDetailedItemLevelInfo(link2) or 0) or 0
     -- Only compare if both slots are occupied
     if link2 and link then
       if ilvl2 < ilvl then return link2, ilvl2 end
@@ -429,7 +429,7 @@ function NLC.Utils.GetAvailableCategories(itemLink, equipLoc, itemId)
 
   -- Weapons — check if player can equip this weapon type
   if WEAPON_SLOTS[equipLoc] then
-    if IsEquippableItem(itemLink) then
+    if C_Item.IsEquippableItem(itemLink) then
       result.upgrade = true
       result.offspec = true
     end
@@ -450,7 +450,7 @@ function NLC.Utils.GetAvailableCategories(itemLink, equipLoc, itemId)
       result.upgrade = true
       result.offspec = true
     end
-  elseif IsEquippableItem(itemLink) then
+  elseif C_Item.IsEquippableItem(itemLink) then
     result.upgrade = true
     result.offspec = true
   else
